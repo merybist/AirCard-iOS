@@ -406,13 +406,31 @@ struct PairingTab: View {
                 Section("Active Pairing File") {
                     HStack(spacing: 10) {
                         if vm.hasPairingFile {
-                            Image(systemName: "checkmark.seal.fill").foregroundStyle(.green)
+                            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Ready to exploit ✅")
+                                Text(vm.activeSourceFileName.isEmpty ? vm.pairingFileName : vm.activeSourceFileName)
                                     .font(.subheadline.bold())
-                                Text("\(vm.pairingFileName) (\(vm.pairingFileSizeString))")
-                                    .font(.caption.monospaced())
-                                    .foregroundStyle(.secondary)
+                                HStack(spacing: 6) {
+                                    Text(vm.pairingFileSizeString)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    switch vm.activePairingFileType {
+                                    case .lockdown:
+                                        Text("• Lockdown (Needs VPN)")
+                                            .font(.caption2)
+                                            .foregroundStyle(.green)
+                                    case .remotePairingComplete:
+                                        Text("• RPPairing RSD")
+                                            .font(.caption2)
+                                            .foregroundStyle(.blue)
+                                    case .remotePairingIncomplete:
+                                        Text("• Incomplete (Unpaired)")
+                                            .font(.caption2.bold())
+                                            .foregroundStyle(.orange)
+                                    case .unknown:
+                                        EmptyView()
+                                    }
+                                }
                             }
                         } else {
                             Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
@@ -434,6 +452,34 @@ struct PairingTab: View {
                             }
                             .buttonStyle(.borderless)
                         }
+                    }
+
+                    if vm.activePairingFileType == .remotePairingIncomplete {
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Incomplete Pairing File Active")
+                                    .font(.caption.bold())
+                                    .foregroundStyle(.orange)
+                                Text("This file has no 'alt_irk' and was not paired in Settings. Select your imported lockdown pairing file (e.g. pairingFile.plist) below and enable LocalDevVPN.")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    } else if vm.activePairingFileType == .lockdown {
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: "info.circle.fill").foregroundStyle(.blue)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Lockdown Pairing Active")
+                                    .font(.caption.bold())
+                                    .foregroundStyle(.blue)
+                                Text("Make sure LocalDevVPN is Connected (10.7.0.1) before reading cards.")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .padding(.vertical, 2)
                     }
 
                     Button {
@@ -660,13 +706,34 @@ struct PairingTab: View {
                 if !vm.documentsPlistFiles.isEmpty {
                     Section("Files in App Folder (On My iPhone › AirCard-iOS)") {
                         ForEach(vm.documentsPlistFiles, id: \.self) { file in
+                            let isSelected = (file == vm.activeSourceFileName) || (vm.activeSourceFileName.isEmpty && file == vm.pairingFileName)
+                            let docURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent(file)
+                            let fileType = vm.inspectPairingFile(path: docURL.path)
                             HStack {
-                                Image(systemName: file == vm.pairingFileName ? "checkmark.circle.fill" : "doc.text")
-                                    .foregroundStyle(file == vm.pairingFileName ? .green : .blue)
-                                Text(file)
-                                    .font(.system(size: 13, design: .monospaced))
+                                Image(systemName: isSelected ? "checkmark.circle.fill" : "doc.text")
+                                    .foregroundStyle(isSelected ? .green : .blue)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(file)
+                                        .font(.system(size: 13, design: .monospaced))
+                                    switch fileType {
+                                    case .lockdown:
+                                        Text("Lockdown Record (Requires LocalDevVPN)")
+                                            .font(.caption2)
+                                            .foregroundStyle(.green)
+                                    case .remotePairingComplete:
+                                        Text("RPPairing RSD (Paired)")
+                                            .font(.caption2)
+                                            .foregroundStyle(.blue)
+                                    case .remotePairingIncomplete:
+                                        Text("Incomplete RPPairing (Missing alt_irk)")
+                                            .font(.caption2)
+                                            .foregroundStyle(.orange)
+                                    case .unknown:
+                                        EmptyView()
+                                    }
+                                }
                                 Spacer()
-                                if file != vm.pairingFileName {
+                                if !isSelected {
                                     Button("Select") {
                                         vm.selectPairingFile(filename: file)
                                     }
@@ -674,6 +741,13 @@ struct PairingTab: View {
                                     .buttonStyle(.bordered)
                                     .controlSize(.small)
                                 }
+                                Button(role: .destructive) {
+                                    vm.deleteDocumentFile(filename: file)
+                                } label: {
+                                    Image(systemName: "trash")
+                                        .foregroundStyle(.red.opacity(0.7))
+                                }
+                                .buttonStyle(.borderless)
                             }
                         }
                     }

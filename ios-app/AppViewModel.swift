@@ -95,9 +95,39 @@ final class AppViewModel: ObservableObject {
     }
 
     // MARK: - Shared
+    @Published var activeSourceFileName: String = UserDefaults.standard.string(forKey: "aircardActiveSourceFileName") ?? ""
     @Published var errorMessage: String? = nil
     @Published var log: [String] = []
     @Published var showDeletePairingConfirm: Bool = false
+
+    enum PairingFileType {
+        case unknown
+        case lockdown
+        case remotePairingComplete
+        case remotePairingIncomplete
+    }
+
+    func inspectPairingFile(path: String) -> PairingFileType {
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
+              let dict = (try? PropertyListSerialization.propertyList(from: data, format: nil)) as? [String: Any] else {
+            return .unknown
+        }
+        if dict["HostPrivateKey"] != nil || dict["DeviceCertificate"] != nil || dict["RootCertificate"] != nil {
+            return .lockdown
+        }
+        if dict["e_private_key"] != nil || dict["identifier"] != nil {
+            if dict["alt_irk"] != nil {
+                return .remotePairingComplete
+            } else {
+                return .remotePairingIncomplete
+            }
+        }
+        return .unknown
+    }
+
+    var activePairingFileType: PairingFileType {
+        inspectPairingFile(path: PairingController.pairingFilePath())
+    }
 
     private let storageKeys = [
         "aircard.cards",
@@ -155,15 +185,17 @@ final class AppViewModel: ObservableObject {
             try data.write(to: aircardURL, options: .atomic)
             try data.write(to: airliftURL, options: .atomic)
 
-            if let orig = originalName, !orig.isEmpty,
-               orig != "aircard_pairing.plist" && orig != "airlift_pairing.plist" {
-                let origURL = docs.appendingPathComponent(orig)
+            let savedName = originalName ?? sourceURL.lastPathComponent
+            if !savedName.isEmpty && savedName != "aircard_pairing.plist" && savedName != "airlift_pairing.plist" {
+                let origURL = docs.appendingPathComponent(savedName)
                 try? data.write(to: origURL, options: .atomic)
             }
 
+            activeSourceFileName = savedName
+            UserDefaults.standard.set(savedName, forKey: "aircardActiveSourceFileName")
             PairingController.customPairingFilePath = aircardURL.path
             refreshPairingFile()
-            pairingStatus = "Pairing file loaded ✅ (\(originalName ?? "aircard_pairing.plist"))"
+            pairingStatus = "Pairing file loaded ✅ (\(savedName))"
             return true
         } catch {
             errorMessage = "Failed to save pairing file: \(error.localizedDescription)"
@@ -178,7 +210,21 @@ final class AppViewModel: ObservableObject {
         let exists = FileManager.default.fileExists(atPath: canonical)
         hasPairingFile = exists
         pairingFileName = exists ? (canonical as NSString).lastPathComponent : ""
+        activeSourceFileName = filename
+        UserDefaults.standard.set(filename, forKey: "aircardActiveSourceFileName")
         scanDocumentsDirectory()
+        pairingStatus = "Active pairing file: \(filename) ✅"
+    }
+
+    func deleteDocumentFile(filename: String) {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let path = docs.appendingPathComponent(filename).path
+        try? FileManager.default.removeItem(atPath: path)
+        if activeSourceFileName == filename {
+            activeSourceFileName = ""
+            UserDefaults.standard.removeObject(forKey: "aircardActiveSourceFileName")
+        }
+        refreshPairingFile()
     }
 
     // MARK: - Pairing File
