@@ -4,7 +4,9 @@
 # Run any time rust-core/ changes, then regenerate with `xcodegen generate`.
 set -euo pipefail
 
-export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode-beta.app/Contents/Developer}"
+DEFAULT_DEV_DIR="/Applications/Xcode.app/Contents/Developer"
+[ -d "/Applications/Xcode-beta.app/Contents/Developer" ] && DEFAULT_DEV_DIR="/Applications/Xcode-beta.app/Contents/Developer"
+export DEVELOPER_DIR="${DEVELOPER_DIR:-$DEFAULT_DEV_DIR}"
 export IPHONEOS_DEPLOYMENT_TARGET="${IPHONEOS_DEPLOYMENT_TARGET:-18.0}"
 
 # Make ~/.cargo visible to non-login shells (Xcode build phases, CI)

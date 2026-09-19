@@ -1,11 +1,12 @@
 import Foundation
 import AirliftFFI
+import UserNotifications
 
 /// Drives the RPPairing host: requests Local Network, keeps the app alive while
 /// the user approves the PIN in Settings, advertises the service over Bonjour,
 /// and runs `al_pairing_run_host` off the main thread.
 @MainActor
-final class PairingController: ObservableObject {
+final class PairingController: NSObject, ObservableObject {
 
     static let shared = PairingController()
 
@@ -34,6 +35,10 @@ final class PairingController: ObservableObject {
 
     private var pairContinuation: CheckedContinuation<String, Error>?
 
+    override private init() {
+        super.init()
+    }
+
     // MARK: - Public API
 
     enum PairingError: LocalizedError {
@@ -50,6 +55,18 @@ final class PairingController: ObservableObject {
             case let .failed(msg): return msg
             }
         }
+    }
+
+    /// Reset stored host identity and remove existing pairing files so a completely fresh
+    /// pairing session is negotiated without stale device verification requests.
+    static func resetHostIdentity() {
+        storedAltIRK = ""
+        let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let aircardPath = dir.appendingPathComponent("aircard_pairing.plist").path
+        let airliftPath = dir.appendingPathComponent("airlift_pairing.plist").path
+        try? FileManager.default.removeItem(atPath: aircardPath)
+        try? FileManager.default.removeItem(atPath: airliftPath)
+        customPairingFilePath = nil
     }
 
     /// Ensures the given pairing file is mirrored to canonical aircard_pairing.plist and airlift_pairing.plist.
@@ -153,6 +170,16 @@ final class PairingController: ObservableObject {
         pairingPIN = nil
         pairingStatus = "Starting local host…"
 
+        // Request local notification permissions quietly so PIN can be pushed to notification banner
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+
+        // If no valid pairing file currently exists, reset host altIRK so device initiates clean pair-setup
+        let outPath = Self.pairingFilePath()
+        let existingSize = (try? FileManager.default.attributesOfItem(atPath: outPath)[.size] as? Int) ?? 0
+        if existingSize == 0 {
+            Self.storedAltIRK = ""
+        }
+
         Task {
             _ = await localNetwork.request()
             guard running else { return }
@@ -236,7 +263,12 @@ final class PairingController: ObservableObject {
                 pairingStatus = "Failed: empty pairing file"
                 resolve(.failure(PairingError.zeroBytes))
             } else {
-                pairingStatus = "Paired: \(name) (\(size)B)"
+                pairingStatus = "Paired: \(name) (\(size)B) ✅"
+                notify(
+                    id: "aircard.done",
+                    title: "Pairing Successful! ✅",
+                    body: "iPhone successfully paired with AirCard-iOS. Return to the app."
+                )
                 resolve(.success(canonical))
             }
         case let .failure(message):
@@ -244,7 +276,6 @@ final class PairingController: ObservableObject {
             resolve(.failure(PairingError.failed(message)))
         }
     }
-
 
     // MARK: Bonjour advertising
 
@@ -256,6 +287,8 @@ final class PairingController: ObservableObject {
             name: serviceID,
             port: port
         )
+        service.delegate = self
+        service.schedule(in: .main, forMode: .common)
         service.setTXTRecord(NetService.data(fromTXTRecord: txt))
         service.publish()
         netService = service
@@ -264,12 +297,51 @@ final class PairingController: ObservableObject {
 
     fileprivate func presentPin(_ pin: String) {
         pairingPIN = pin
-        pairingStatus = "Enter PIN \(pin) in Settings › Privacy & Security › Developer Mode › Pair with AirCard-iOS"
+        pairingStatus = "Enter PIN \(pin) in Settings › Developer Mode"
+        notify(
+            id: "aircard.pin",
+            title: "AirCard-iOS Pairing PIN",
+            body: "Enter PIN \(pin) in Settings › Privacy & Security › Developer Mode › Pair with AirCard-iOS"
+        )
     }
 
     private func stopAdvertising() {
         netService?.stop()
         netService = nil
+    }
+
+    private func notify(id: String, title: String, body: String) {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        let request = UNNotificationRequest(identifier: id, content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request)
+    }
+}
+
+// MARK: - NetServiceDelegate
+
+extension PairingController: NetServiceDelegate {
+    nonisolated func netServiceDidPublish(_ sender: NetService) {
+        Task { @MainActor in
+            self.pairingStatus = "Advertising — open Settings › Privacy & Security › Developer Mode"
+            AppViewModel.shared?.log.append("RPPairing: NetService published '\(sender.name)' on port \(sender.port)")
+        }
+    }
+
+    nonisolated func netService(_ sender: NetService, didNotPublish errorDict: [String: NSNumber]) {
+        Task { @MainActor in
+            let code = errorDict[NetService.errorCode]?.intValue ?? -1
+            self.pairingStatus = "Bonjour publication failed (code \(code)). Check Wi-Fi."
+            AppViewModel.shared?.log.append("RPPairing: NetService failed to publish: \(errorDict)")
+        }
+    }
+
+    nonisolated func netServiceDidStop(_ sender: NetService) {
+        Task { @MainActor in
+            AppViewModel.shared?.log.append("RPPairing: NetService stopped")
+        }
     }
 }
 
@@ -305,4 +377,3 @@ private func cStr(_ ptr: UnsafeMutablePointer<CChar>?) -> String {
     guard let ptr = ptr else { return "" }
     return String(cString: ptr)
 }
-

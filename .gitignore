@@ -26,3 +26,4 @@ Cargo.lock
 *.mobiledevicepairing
 *.mobilepair
 !ios-app/Info.plist
+!AirliftFFI.xcframework/**/Info.plist

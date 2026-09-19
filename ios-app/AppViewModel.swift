@@ -86,8 +86,12 @@ final class AppViewModel: ObservableObject {
     @Published var exportedThemeURL: URL? = nil
     @Published var showShareSheet: Bool = false
 
+    var supportsOnDevicePairing: Bool {
+        ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 17
+    }
+
     var isIOS27OrHigher: Bool {
-        ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27
+        supportsOnDevicePairing
     }
 
     // MARK: - Shared
@@ -241,11 +245,16 @@ final class AppViewModel: ObservableObject {
     }
 
     func deletePairingFile() {
-        let path = PairingController.pairingFilePath()
-        try? FileManager.default.removeItem(atPath: path)
-        PairingController.customPairingFilePath = nil
+        PairingController.resetHostIdentity()
         refreshPairingFile()
-        pairingStatus = "Pairing file deleted"
+        pairingStatus = "Pairing file deleted & host identity reset"
+    }
+
+    func resetAndRePair() {
+        cancelPairing()
+        PairingController.resetHostIdentity()
+        refreshPairingFile()
+        startPairing()
     }
 
     // MARK: - Network
