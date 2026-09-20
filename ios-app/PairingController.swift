@@ -76,13 +76,22 @@ final class PairingController: NSObject, ObservableObject {
         let aircardURL = dir.appendingPathComponent("aircard_pairing.plist")
         let airliftURL = dir.appendingPathComponent("airlift_pairing.plist")
 
-        if let data = try? Data(contentsOf: URL(fileURLWithPath: sourcePath)), !data.isEmpty {
-            if sourcePath != aircardURL.path {
-                try? data.write(to: aircardURL, options: .atomic)
+        if let rawData = try? Data(contentsOf: URL(fileURLWithPath: sourcePath)), !rawData.isEmpty {
+            var dataToWrite = rawData
+            if var dict = (try? PropertyListSerialization.propertyList(from: rawData, format: nil)) as? [String: Any] {
+                // If it is a lockdown pairing file without alt_irk, strip incomplete RSD keys to prevent 2-minute timeouts
+                if (dict["HostPrivateKey"] != nil || dict["DeviceCertificate"] != nil) && dict["alt_irk"] == nil {
+                    dict.removeValue(forKey: "identifier")
+                    dict.removeValue(forKey: "private_key")
+                    dict.removeValue(forKey: "public_key")
+                    if let sanitized = try? PropertyListSerialization.data(fromPropertyList: dict, format: .xml, options: 0) {
+                        dataToWrite = sanitized
+                    }
+                }
             }
-            if sourcePath != airliftURL.path {
-                try? data.write(to: airliftURL, options: .atomic)
-            }
+
+            try? dataToWrite.write(to: aircardURL, options: .atomic)
+            try? dataToWrite.write(to: airliftURL, options: .atomic)
             customPairingFilePath = aircardURL.path
             return aircardURL.path
         }
@@ -127,6 +136,41 @@ final class PairingController: NSObject, ObservableObject {
                 let size = (try? FileManager.default.attributesOfItem(atPath: candidatePath)[.size] as? Int) ?? 0
                 if size > 0 {
                     _ = syncCanonicalPairingFile(from: candidatePath)
+                    return aircardPath
+                }
+            }
+        }
+
+        // Scan main bundle for an embedded pairing file (injected into IPA / Payload / iLoader)
+        let bundleNames = ["aircard_pairing", "airlift_pairing", "pairing", "pairingFile"]
+        for name in bundleNames {
+            if let bundleURL = Bundle.main.url(forResource: name, withExtension: "plist") {
+                let size = (try? FileManager.default.attributesOfItem(atPath: bundleURL.path)[.size] as? Int) ?? 0
+                if size > 0 {
+                    _ = syncCanonicalPairingFile(from: bundleURL.path)
+                    return aircardPath
+                }
+            }
+        }
+
+        if let bundlePlists = Bundle.main.urls(forResourcesWithExtension: "plist", subdirectory: nil) {
+            for bURL in bundlePlists {
+                let fname = bURL.lastPathComponent.lowercased()
+                if fname.contains("pairing") || fname.contains("aircard") || fname.contains("airlift") || fname.contains("lockdown") {
+                    let size = (try? FileManager.default.attributesOfItem(atPath: bURL.path)[.size] as? Int) ?? 0
+                    if size > 0 {
+                        _ = syncCanonicalPairingFile(from: bURL.path)
+                        return aircardPath
+                    }
+                }
+            }
+        }
+
+        if let bundleOther = Bundle.main.urls(forResourcesWithExtension: "mobiledevicepairing", subdirectory: nil) {
+            for bURL in bundleOther {
+                let size = (try? FileManager.default.attributesOfItem(atPath: bURL.path)[.size] as? Int) ?? 0
+                if size > 0 {
+                    _ = syncCanonicalPairingFile(from: bURL.path)
                     return aircardPath
                 }
             }

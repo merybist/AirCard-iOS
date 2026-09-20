@@ -54,10 +54,17 @@ enum NetworkStatus {
 
     private static func isLoopbackTunnelUp(in ifs: [Interface], deviceIP: String) -> Bool {
         guard let target = ipv4Value(deviceIP) else {
-            return ifs.contains { isTunnelInterface($0.name) }
+            return false
         }
-        if tunnelCarriesRoute(to: deviceIP, in: ifs) == true { return true }
-        return ifs.contains { isTunnelInterface($0.name) && subnet($0, contains: target) }
+        // 1. Direct route check
+        if tunnelCarriesRoute(to: deviceIP, in: ifs) == true {
+            return true
+        }
+        // 2. Check if any tunnel interface actually has an address in the 10.7.0.x subnet
+        if ifs.contains(where: { isTunnelInterface($0.name) && ($0.ipv4.hasPrefix("10.7.0.") || subnet($0, contains: target)) }) {
+            return true
+        }
+        return false
     }
 
     private static func tunnelCarriesRoute(to deviceIP: String, in ifs: [Interface]) -> Bool? {
@@ -116,8 +123,7 @@ enum NetworkStatus {
     }
 
     static func isTunnelInterface(_ name: String) -> Bool {
-        name.hasPrefix("utun") || name.hasPrefix("ipsec")
-            || name.hasPrefix("tap") || name.hasPrefix("ppp")
+        name.hasPrefix("utun") || name.hasPrefix("tap") || name.hasPrefix("ppp")
     }
 
     private static func subnet(_ interface: Interface, contains target: UInt32) -> Bool {

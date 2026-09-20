@@ -11,7 +11,7 @@ export IPHONEOS_DEPLOYMENT_TARGET="${IPHONEOS_DEPLOYMENT_TARGET:-18.0}"
 
 # Make ~/.cargo visible to non-login shells (Xcode build phases, CI)
 # shellcheck disable=SC1090
-source "$HOME/.cargo/env" 2>/dev/null || true
+# source "$HOME/.cargo/env" 2>/dev/null || true
 
 # Remap $HOME so absolute source paths don't appear in the binary's log output
 export RUSTFLAGS="${RUSTFLAGS:-} --remap-path-prefix=${HOME}=/build"

@@ -437,7 +437,7 @@ struct PairingTab: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("No pairing file loaded")
                                     .font(.subheadline.bold())
-                                Text(vm.isIOS27OrHigher ? "Pair on device or select a pairing file." : "Select or drop a pairing file below.")
+                                Text("Import a pairing file (.plist) or embed it into the IPA.")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -500,206 +500,30 @@ struct PairingTab: View {
                     Text("The active pairing file will be removed.")
                 }
 
-                // On-Device Pairing Section (iOS 17+)
-                if vm.isIOS27OrHigher {
-                    Section("Pair on This iPhone") {
-                        // Wi-Fi / VPN pre-flight warnings
-                        if !vm.wifiUp {
-                            HStack(alignment: .top, spacing: 8) {
-                                Image(systemName: "wifi.exclamationmark")
-                                    .foregroundStyle(.orange)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("Wi-Fi Not Connected")
-                                        .font(.caption.bold())
-                                        .foregroundStyle(.orange)
-                                    Text("Remote pairing Bonjour host requires an active Wi-Fi connection.")
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                            .padding(.vertical, 2)
-                        }
-
-                        if vm.vpnUp {
-                            HStack(alignment: .top, spacing: 8) {
-                                Image(systemName: "network.badge.shield.half.filled")
-                                    .foregroundStyle(.orange)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("VPN is Connected")
-                                        .font(.caption.bold())
-                                        .foregroundStyle(.orange)
-                                    Text("Turn off LocalDevVPN or other VPN tunnels during initial pairing so mDNS multicast is not blocked.")
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                            .padding(.vertical, 2)
-                        }
-
-                        if vm.pairingPhase == .pairing {
-                            VStack(alignment: .leading, spacing: 14) {
-                                HStack(spacing: 8) {
-                                    ProgressView().scaleEffect(0.85)
-                                    Text(vm.pairingStatus.isEmpty ? "Broadcasting pairing host…" : vm.pairingStatus)
-                                        .font(.subheadline)
-                                        .foregroundStyle(.secondary)
-                                }
-
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text("Steps to pair on this device:")
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(.secondary)
-
-                                    HStack(alignment: .top, spacing: 8) {
-                                        Text("1.").font(.caption.bold()).foregroundStyle(.orange)
-                                        Text("Open **Settings** › **Privacy & Security** › **Developer Mode**")
-                                            .font(.caption)
-                                    }
-                                    HStack(alignment: .top, spacing: 8) {
-                                        Text("2.").font(.caption.bold()).foregroundStyle(.orange)
-                                        Text("Scroll to bottom and tap **Pair with AirCard-iOS**")
-                                            .font(.caption)
-                                    }
-                                    HStack(alignment: .top, spacing: 8) {
-                                        Text("3.").font(.caption.bold()).foregroundStyle(.orange)
-                                        Text("Enter your device passcode, then the PIN shown below")
-                                            .font(.caption)
-                                    }
-                                }
-                                .padding(10)
-                                .background(Color(.secondarySystemBackground))
-                                .clipShape(RoundedRectangle(cornerRadius: 10))
-
-                                if let pin = vm.pairingPIN {
-                                    VStack(alignment: .leading, spacing: 10) {
-                                        Text("PAIRING PIN:")
-                                            .font(.caption2.bold().uppercaseSmallCaps())
-                                            .foregroundStyle(.secondary)
-
-                                        HStack(alignment: .center, spacing: 0) {
-                                            Text(pin)
-                                                .font(.system(size: 38, weight: .black, design: .monospaced))
-                                                .foregroundStyle(.orange)
-                                            Spacer()
-                                            Button {
-                                                UIPasteboard.general.string = pin
-                                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                                            } label: {
-                                                Label("Copy", systemImage: "doc.on.doc")
-                                                    .font(.caption.bold())
-                                            }
-                                            .buttonStyle(.bordered)
-                                            .tint(.orange)
-                                        }
-
-                                        Text("PIN has also been dispatched as a notification banner.")
-                                            .font(.caption2)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    .padding(14)
-                                    .background(Color.orange.opacity(0.12))
-                                    .clipShape(RoundedRectangle(cornerRadius: 14))
-                                }
-
-                                Button {
-                                    if let url = URL(string: UIApplication.openSettingsURLString) {
-                                        UIApplication.shared.open(url)
-                                    }
-                                } label: {
-                                    Label("Open Settings App", systemImage: "arrow.up.forward.app")
-                                        .bold()
-                                        .frame(maxWidth: .infinity)
-                                }
-                                .buttonStyle(.borderedProminent)
-                                .tint(.orange)
-
-                                Button(role: .cancel) {
-                                    vm.cancelPairing()
-                                } label: {
-                                    Label("Cancel Pairing", systemImage: "xmark")
-                                        .frame(maxWidth: .infinity)
-                                }
-                                .buttonStyle(.bordered)
-                                .tint(.red)
-                            }
-                        } else {
-                            if !vm.pairingStatus.isEmpty && vm.pairingStatus != "idle" {
-                                Text(vm.pairingStatus)
-                                    .font(.caption)
-                                    .foregroundStyle(
-                                        vm.pairingStatus.contains("✅") ? .green :
-                                        vm.pairingStatus.contains("❌") || vm.pairingStatus.contains("failed") ? .red :
-                                        .secondary
-                                    )
-                            }
-
-                            Button {
-                                vm.startPairing()
-                            } label: {
-                                Label(
-                                    vm.hasPairingFile ? "Re-Pair This iPhone" : "Pair This iPhone",
-                                    systemImage: "antenna.radiowaves.left.and.right"
-                                )
-                                .bold()
-                                .frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .controlSize(.large)
-
-                            if vm.hasPairingFile {
-                                Button(role: .destructive) {
-                                    vm.resetAndRePair()
-                                } label: {
-                                    Label("Reset Identity & Clean Re-Pair", systemImage: "arrow.triangle.2.circlepath")
-                                        .font(.caption)
-                                        .frame(maxWidth: .infinity)
-                                }
-                                .buttonStyle(.borderless)
-                            }
-                        }
-                    }
-
-                    // Alternative File Import Section
-                    Section("Pairing File (Alternative)") {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("You can also select a `.plist` pairing file from Files:")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        Button {
-                            showFilePicker = true
-                        } label: {
-                            Label("Choose Pairing File from Files…", systemImage: "folder.badge.plus")
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .buttonStyle(.bordered)
-                    }
-                } else {
-                    // iOS < 17 Guard: ONLY show Select Pairing File option!
-                    Section {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Label("iOS \(ProcessInfo.processInfo.operatingSystemVersion.majorVersion) Detected", systemImage: "info.circle.fill")
-                                .font(.subheadline.bold())
+                // Pairing File Setup (iOS 26+ / Developer Mode Pairing Removed)
+                Section("Import or Embed Pairing File") {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "info.circle.fill")
                                 .foregroundStyle(.blue)
-                            Text("Direct on-device pairing requires iOS 17+. On this device, please import a pairing file (.plist) generated from a Mac or PC.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                            Text("Pairing File Required")
+                                .font(.subheadline.bold())
                         }
-                        .padding(.vertical, 4)
+                        Text("On iOS 26+, on-device Developer Mode pairing is unavailable. You can either embed your pairing file directly into the IPA using iLoader / sideloading tools, or import it below using the Files app.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
+                    .padding(.vertical, 2)
 
-                    Section("Select Pairing File") {
-                        Button {
-                            showFilePicker = true
-                        } label: {
-                            Label("Choose Pairing File from Files…", systemImage: "folder.badge.plus")
-                                .bold()
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
+                    Button {
+                        showFilePicker = true
+                    } label: {
+                        Label("Choose Pairing File from Files…", systemImage: "folder.badge.plus")
+                            .bold()
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
                 }
 
                 // Files found in Documents folder
@@ -868,12 +692,16 @@ struct VPNStatusRow: View {
                     .autocorrectionDisabled()
                     .frame(width: 120)
                 Button {
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                     vm.refreshNetworkStatus()
+                    vm.refreshPairingFile()
+                    vm.log.append("Network refreshed: VPN=\(vm.vpnUp ? "UP" : "DOWN"), WiFi=\(vm.wifiUp ? "UP" : "DOWN")")
                 } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.caption)
+                    Label("Refresh", systemImage: "arrow.clockwise")
+                        .font(.caption.bold())
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
             }
 
             if !vm.networkDetail.isEmpty {

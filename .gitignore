@@ -8,6 +8,7 @@ DerivedData/
 build/
 *.hmap
 *.ipa
+*.dmg
 *.dSYM.zip
 *.dSYM
 
