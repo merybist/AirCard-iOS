@@ -92,11 +92,11 @@ if command -v create-dmg >/dev/null 2>&1; then
         --volicon "$VOL_ICON" \
         --background "$BG_IMG" \
         --window-pos 200 120 \
-        --window-size 660 420 \
+        --window-size 660 400 \
         --icon-size 110 \
-        --icon "AirCardInjector.app" 180 220 \
+        --icon "AirCardInjector.app" 175 195 \
         --hide-extension "AirCardInjector.app" \
-        --app-drop-link 480 220 \
+        --app-drop-link 485 195 \
         --overwrite \
         "$DMG_PATH" \
         "$DMG_CONTENT" || {
