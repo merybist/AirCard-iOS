@@ -5,202 +5,143 @@
 </p>
 
 <p align="center">
-  <b>Apple Wallet card skins and lock screen passcode themes directly on iOS 17 – iOS 26+.</b>
+  Apple Wallet card skins, lock screen passcode themes, and PosterBoard wallpapers directly on iOS 27+.
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Platform-iOS%2017%20--%2026%2B-blue?style=flat-square&logo=apple" alt="Platform" />
-  <img src="https://img.shields.io/badge/macOS-Universal%20(M1%2FM2%2FM3%20%2B%20Intel)-6f42c1?style=flat-square&logo=apple" alt="macOS" />
+  <img src="https://img.shields.io/badge/Platform-iOS%2027+-blue?style=flat-square&logo=apple" alt="Platform" />
   <img src="https://img.shields.io/badge/Swift-5.0-orange?style=flat-square&logo=swift" alt="Swift" />
   <img src="https://img.shields.io/badge/Rust-FFI%20Core-red?style=flat-square&logo=rust" alt="Rust" />
   <img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="License" />
+  <a href="https://www.paypal.com/donate/?hosted_button_id=98QRTC2HFRA4Y"><img src="https://img.shields.io/badge/Donate-PayPal-00457C?style=flat-square&logo=paypal" alt="Donate with PayPal" /></a>
 </p>
-
----
-
-## Table of Contents
-- [Overview](#overview)
-- [The iOS 26+ Breakthrough](#the-ios-26-breakthrough)
-  - [Why did previous methods break on iOS 26?](#why-did-previous-methods-break-on-ios-26)
-  - [The Solution: RemotePairing (RSD) & `alt_irk`](#the-solution-remotepairing-rsd--alt_irk)
-- [Features](#features)
-- [AirCard Injector (macOS GUI App)](#aircard-injector-macos-gui-app)
-- [Step-by-Step Guide for iOS 26](#step-by-step-guide-for-ios-26)
-- [CLI Tool for Linux & Windows](#cli-tool-for-linux--windows)
-- [Building From Source](#building-from-source)
-- [Repository Structure](#repository-structure)
-- [Credits & Acknowledgments](#credits--acknowledgments)
-- [License](#license)
-
----
 
 ## Overview
 
-AirCard-iOS writes custom artwork to iOS system caches over a local loopback connection. It allows you to customize Apple Wallet card artwork and the passcode dialer directly on your device without keeping a computer connected.
+AirCard-iOS customizes Apple Wallet card artwork, lock screen passcode dialers, and lock screen wallpapers on device without a jailbreak.
 
-The core filesystem injection is powered by a Rust static library (`AirliftFFI`) that executes the AirTraffic protocol over a local tunnel managed by **LocalDevVPN**.
+The app communicates with internal system services over a local loopback tunnel (`10.7.0.1` or `127.0.0.1`) provided by LocalDevVPN. File operations are handled by `AirliftFFI`, a Rust library that interfaces with the AirTraffic service.
 
----
-
-## The iOS 26+ Breakthrough
-
-### Why did previous methods break on iOS 26?
-
-1. **Removal of on-device Developer Mode pairing**: Starting in iOS 26, Apple removed the built-in Bonjour pairing service in *Settings › Privacy & Security › Developer Mode › Pair with...*. Devices can no longer pair with themselves through the Settings menu.
-2. **Lockdownd loopback blocking**: Apple hardened local socket routing. Attempting to connect to `lockdownd` on port `62078` over virtual network interfaces (LocalDevVPN, `utun`) results in immediate socket errors:
-   ```
-   connect to lockdownd on 10.7.0.1:62078 failed: Socket(Os { code: 32, kind: BrokenPipe })
-   ```
-3. **Missing `alt_irk` in legacy pairing files**: Legacy lockdown plists (or basic iLoader exports) only include USB lockdown certificates. Without the full Ed25519 RemotePairing handshake containing `alt_irk` (16-byte Identity Resolving Key), the device terminates RSD handshakes (`Connection reset by peer`) on port `49152`, causing 4-minute connection timeouts.
-
-### The Solution: RemotePairing (RSD) & `alt_irk`
-
-The only valid internal channel on iOS 17+ and iOS 26 is **RemotePairing (RSD) on port `49152`**.
-
-By pairing the iPhone once using **[`idevice_pair`](https://github.com/jkcoxson/idevice_pair)** (developed by **[@jkcoxson](https://github.com/jkcoxson)**), a full RemotePairing record is negotiated with Apple's `remotepairingd`. This generates a `pairingFile.plist` that includes:
-- `alt_irk` (16 bytes)
-- `e_private_key` and `e_public_key`
-- `identifier`
-
-When this pairing record is embedded into `AirCard-iOS.app`, the Rust engine authenticates to `10.7.0.1:49152` instantly, bypassing lockdownd restrictions and enabling live card scanning and skin injection on iOS 26.
-
----
+> **Compatibility**: AirCard-iOS targets iOS 27.0 or newer (iOS 27+), and also supports iOS 17 – 26 devices via RemotePairing (RSD).
 
 ## Features
 
-### Wallet Card Skins
-- Renders images to Wallet specifications (`cardBackgroundCombined@3x.png` at 1536×969, `@2x` at 1024×646, and `cardBackgroundCombined.pdf` for Suica / transit cards).
-- Automatically purges local pass caches (`FrontFace`, `Preview`, `PlaceHolder`) so changes appear immediately when Wallet restarts.
-- Set artwork for individual cards or apply globally across all detected passes.
-- **Live Card Detection**: Automatically detects the active card pass identifier when you trigger Apple Pay.
+### Apple Wallet card skins
+- Writes custom card artwork to Passbook caches (`cardBackgroundCombined@3x.png`, `@2x.png`, and `cardBackgroundCombined.pdf` for transit cards like Suica).
+- Flushes front-face and thumbnail caches so new artwork appears immediately when Wallet opens.
+- Detects card identifiers in real time when you bring up Apple Pay.
+- Apply artwork to individual cards or batch-flash every detected card.
 
-### Passcode Keypad Themes
-- Interactive dialer preview with touch panning and zoom framing.
-- **Poster layout**: Spans a single image across all ten keypad buttons.
-- **Circle button layout**: Fits cropped images inside each keypad dial.
-- Supports system cache targets including `TelephonyUI-10`.
-- Supports localized number subtexts (Ukrainian, Russian Cyrillic, and standard Latin).
-- Imports and exports themes as `.passthm` archives.
+### Passcode dialer themes
+- Live dialer preview with touch panning and zoom framing.
+- Full poster layout across all ten buttons, or individual circular button cutouts.
+- Targets system dialer caches (`TelephonyUI-10`).
+- Localized number subtext options, including Ukrainian and Russian Cyrillic layouts.
+- Import and export themes as `.passthm` files.
 
----
+### PosterBoard wallpapers (.tendies)
+- Import and unpack `.tendies` wallpaper archives directly from the Files app.
+- Auto-detects PosterBoard wallpaper containers and active descriptor UUIDs.
+- Injects wallpaper configurations and assets into PosterBoard storage.
+- Automatically triggers a NeoSpring respring after flashing to apply wallpapers without rebooting your iPhone.
 
-## AirCard Injector (macOS GUI App)
+### On-device pairing
+- Advertises locally over Bonjour so the phone can pair with itself via Settings > Privacy & Security > Developer Mode > Pair with AirCard-iOS.
+- Reads and syncs pairing records automatically into `aircard_pairing.plist`.
+- Once paired, no computer or external connection is needed.
+- **For iOS versions without on-device Developer Mode pairing (iOS 26+)**: Devices can pair once via [idevice_pair](https://github.com/jkcoxson/idevice_pair) to generate a RemotePairing record with `alt_irk` (port `49152`), or inject it directly into the IPA using **AirCard Injector** (`tools/mac-injector`).
 
-To make pairing and installation effortless for everyone, we built **AirCard Injector** — a native macOS SwiftUI application packaged in a custom styled DMG disk image.
+## Prerequisites
 
-<p align="center">
-  <img src="tools/mac-injector/assets/app_icon_1024.png" width="96" height="96" alt="AirCard Injector Icon" />
-</p>
+1. **iOS 27+ / iOS 17+**: Exploit and paths target modern iOS versions.
+2. **LocalDevVPN**: Running in loopback mode (`10.7.0.1` or `127.0.0.1`) so local connections can reach internal device services.
+3. **Developer Mode pairing**: Pair directly in Settings > Privacy & Security > Developer Mode > Pair with AirCard-iOS, or place/embed an existing pairing plist (`pairingFile.plist` / `aircard_pairing.plist`) in the app.
 
-### Key Highlights:
-- **Universal 2 Binary**: Runs natively on Apple Silicon (M1/M2/M3/M4) and Intel Macs.
-- **Embedded `idevice_pair`**: Includes the pairing helper inside the app bundle — no terminal or command-line tools needed.
-- **Auto-Detection**: Automatically detects your connected device's `pairingFile.plist` from `idevice_pair` or system lockdown stores.
-- **1-Click Injection**: Injects the pairing credentials into `AirCard-iOS.ipa` and produces a ready-to-sideload IPA.
-- **Clean & Private**: Runs completely locally with zero telemetry and zero external server dependency.
+## Installation
 
-You can build the DMG yourself using `./tools/mac-injector/build_app.sh` or download the prebuilt release.
+Install `AirCard-iOS.ipa` using your preferred sideloading method:
 
----
+- SideStore or AltStore
+- TrollStore
+- LiveContainer
+- Xcode or iOS App Signer
 
-## Step-by-Step Guide for iOS 26
+### AirCard Injector (Optional Helper Tool)
 
-### Step 1: Generate the Pairing File
-1. Open **AirCard Injector** on your Mac.
-2. Connect your iPhone via USB cable and unlock it (tap *Trust This Computer* if prompted).
-3. In AirCard Injector, click **"⚡ Run idevice_pair Helper"**.
-4. In the helper window, select your connected iPhone and complete the pairing.
-5. The `pairingFile.plist` will be saved to your `Documents` folder and automatically selected in the injector.
+If your iOS version lacks on-device Developer Mode pairing or has locked-down `lockdownd` loopback access, you can use the included helper tools in `tools/`:
 
-### Step 2: Inject Credentials into the IPA
-1. Select your base `AirCard-iOS.ipa` in AirCard Injector.
-2. Click **"Inject Pairing & Build IPA"**.
-3. Choose where to save your personalized `AirCard-iOS-Personalized.ipa`.
+- **macOS App (`tools/mac-injector`)**: A native SwiftUI app packaged with embedded `idevice_pair` to generate the RemotePairing file and inject it into the IPA in 1 click. Run `./tools/mac-injector/build_app.sh` to build `AirCardInjector.dmg`.
+- **CLI Tool (`tools/cli-injector`)**: Cross-platform Python script (`inject_pairing.py`) for Linux, Windows, and macOS.
 
-### Step 3: Install & Activate on iOS 26
-1. Sideload the personalized IPA using **AltStore**, **SideStore**, **TrollStore**, **Feather**, or **iLoader**.
-2. Install and launch **LocalDevVPN** on your iPhone. Ensure it is connected (status: `VPN=UP`).
-3. Open **AirCard-iOS**. The app will detect the embedded pairing record and connect to `10.7.0.1:49152` over RSD.
-4. Tap **"Start Live Card Scanner"**, double-click your power button to bring up Apple Pay, and customize your cards!
-
----
-
-## CLI Tool for Linux & Windows
-
-For users on Linux or Windows, a standalone Python CLI tool is provided:
-
-```bash
-# Install dependencies (Python 3.8+ required)
-python3 tools/cli-injector/inject_pairing.py -i AirCard-iOS.ipa -p pairingFile.plist -o AirCard-iOS-Personalized.ipa
-```
-
----
-
-## Building From Source
+## Building from source
 
 ### Requirements
 - macOS 14.0 or newer with Xcode 16 or newer
 - XcodeGen (`brew install xcodegen`)
-- create-dmg (`brew install create-dmg`, for building the DMG)
-- Rust toolchain (`rustup target add aarch64-apple-ios`)
+- Rust toolchain (only needed if rebuilding `rust-core`)
 
-### Build the iOS IPA
+### Build the IPA
 ```bash
-git clone https://github.com/merybist/AirCard-iOS.git
+git clone https://github.com/mak5er/AirCard-iOS.git
 cd AirCard-iOS
 ./build-ipa.sh
 ```
-The resulting archive is placed at `build/AirCard-iOS.ipa`.
 
-### Build the macOS AirCard Injector DMG
+The completed package is written to `build/AirCard-iOS.ipa`.
+
+### Rebuilding the Rust framework
+To compile changes in `rust-core`:
 ```bash
-./tools/mac-injector/build_app.sh
+./build-ios.sh
 ```
-The DMG image is generated at `AirCardInjector.dmg`.
 
----
-
-## Repository Structure
+## Repository structure
 
 ```
 AirCard-iOS/
-├── ios-app/                   # SwiftUI iOS application
-│   ├── AirCardApp.swift       # App lifecycle
+├── ios-app/                   # SwiftUI application
+│   ├── AirCardApp.swift       # App entry point and lifecycle
 │   ├── AppViewModel.swift     # State management and exploit orchestration
-│   ├── ContentView.swift      # Main UI views & live scanner interface
+│   ├── ContentView.swift      # Main UI views
+│   ├── TendiesView.swift      # PosterBoard wallpaper view
+│   ├── TendiesEngine.swift    # Tendies extraction and injection logic
+│   ├── RespringHelper.swift   # NeoSpring WebKit respring implementation
 │   ├── Models.swift           # Image slicing, theme layout, archive packing
-│   ├── PairingController.swift# Bonjour & RemotePairing controller
-│   ├── NetworkStatus.swift    # VPN loopback detection & interface polling
-│   ├── Utilities.swift        # Audio keep-alive and system helpers
+│   ├── PairingController.swift# Bonjour host and pairing sync
+│   ├── NetworkStatus.swift    # VPN loopback detection
+│   ├── Utilities.swift        # Background keep-alive and helper functions
 │   ├── GrappaHelper.[h,m]     # ATC protocol helpers
 │   ├── Info.plist             # Bundle configuration
-│   └── Assets.xcassets/       # App icons and assets
+│   └── Assets.xcassets/       # App icons and image sets
 ├── tools/
-│   ├── mac-injector/          # Native macOS SwiftUI Injector application
-│   │   ├── main.swift         # SwiftUI app source code (English)
-│   │   ├── build_app.sh       # Universal 2 compilation & DMG packager
-│   │   └── assets/            # AppIcon.icns & custom DMG background
-│   └── cli-injector/          # Cross-platform CLI injector (Linux / Windows)
-│       └── inject_pairing.py  # Standalone pairing injection script
-├── AirliftFFI.xcframework/    # Compiled arm64 Rust static library & headers
-├── rust-core/                 # Rust core source code (AirTraffic & RemotePairing)
+│   ├── mac-injector/          # Native macOS SwiftUI pairing injector app & DMG packager
+│   └── cli-injector/          # Cross-platform CLI injector (inject_pairing.py)
+├── AirliftFFI.xcframework/    # Compiled arm64 Rust static library and headers
+├── rust-core/                 # Rust core source code
 ├── project.yml                # XcodeGen project definition
-├── build-ipa.sh               # Script to build and package the iOS IPA
-├── build-ios.sh               # Script to rebuild the Rust xcframework
+├── build-ipa.sh               # IPA build script
+├── build-ios.sh               # Rust framework build script
 ├── LICENSE                    # MIT License
 └── README.md                  # Project documentation
 ```
 
----
+## Credits
 
-## Credits & Acknowledgments
+- **[@mak5er](https://github.com/mak5er)**: Lead developer, UI, passcode theming, Tendies engine, on-device pairing.
+- **[@merybist](https://github.com/merybist)**: Initial base port, iOS 26 RemotePairing research, and AirCard Injector macOS tooling.
+- **[@jkcoxson](https://github.com/jkcoxson)**: Creator of [idevice_pair](https://github.com/jkcoxson/idevice_pair) and the `idevice` Rust ecosystem for RemotePairing support.
+- **[AirLift](https://github.com/0xjohnnydev/airlift)** by **[0xjohnny (@0xjohnnydev)](https://github.com/0xjohnnydev)**: AirTraffic and ATAirlock sandbox escape research underlying `AirliftFFI`.
+- **[NeoSpring](https://github.com/rooootdev/neospring)**: Swift implementation by **[@skadz108](https://github.com/skadz108)** and **[@rooootdev](https://github.com/rooootdev)**, and **[@neonmodder123](https://github.com/neonmodder123)** for the WebKit GPU process respring technique.
+- Built upon concepts from the **AirCard** project.
 
-- **[@mak5er](https://github.com/mak5er)**: Original author of AirCard-iOS — architecture, UI, passcode theming engine, and pairing automation.
-- **[@merybist](https://github.com/merybist)**: iOS 26 RemotePairing research, RSD tunnel fixes, `alt_irk` authentication discovery, native macOS AirCard Injector app & DMG packaging.
-- **[@jkcoxson](https://github.com/jkcoxson)**: Creator of **[`idevice_pair`](https://github.com/jkcoxson/idevice_pair)** and the **[`idevice`](https://github.com/jkcoxson/idevice)** Rust crate. The breakthrough in iOS 26 pairing was made possible thanks to his work reverse-engineering Apple's RemotePairing protocol.
-- **[AirLift](https://github.com/0xjohnnydev/airlift)** by **[0xjohnny (@0xjohnnydev)](https://github.com/0xjohnnydev)**: Original AirTraffic/ATAirlock sandbox escape research underlying `AirliftFFI`.
+## Support
 
----
+If you want to support AirCard-iOS development:
+
+- **PayPal**: [Donate via PayPal](https://www.paypal.com/donate/?hosted_button_id=98QRTC2HFRA4Y)
+- **TON**: `UQBm9KPhtMw-XVVjirUoa09wzrlyWsbeZhKfefl1Uw-qNZ-r`
+- **USDT (TRC20)**: `TDkDMCyjYxgvkWUnQiF5Erk2RyPQMT6G1n`
+- **USDT / BNB (BEP20)**: `0x0954dc491c502849d04956ef74634aa5931a08e8`
 
 ## License
 
