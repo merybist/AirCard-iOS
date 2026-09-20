@@ -94,6 +94,7 @@ if command -v create-dmg >/dev/null 2>&1; then
         --window-pos 200 120 \
         --window-size 660 400 \
         --icon-size 110 \
+        --text-size 13 \
         --icon "AirCardInjector.app" 175 195 \
         --hide-extension "AirCardInjector.app" \
         --app-drop-link 485 195 \
