@@ -5,11 +5,11 @@
 </p>
 
 <p align="center">
-  Apple Wallet card skins, lock screen passcode themes, and PosterBoard wallpapers directly on iOS 27+.
+  Apple Wallet card skins, lock screen passcode themes, and PosterBoard wallpapers directly on iOS 26 – 27+.
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Platform-iOS%2027+-blue?style=flat-square&logo=apple" alt="Platform" />
+  <img src="https://img.shields.io/badge/Platform-iOS%2026%20--%2027%2B-blue?style=flat-square&logo=apple" alt="Platform" />
   <img src="https://img.shields.io/badge/Swift-5.0-orange?style=flat-square&logo=swift" alt="Swift" />
   <img src="https://img.shields.io/badge/Rust-FFI%20Core-red?style=flat-square&logo=rust" alt="Rust" />
   <img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="License" />
@@ -22,7 +22,18 @@ AirCard-iOS customizes Apple Wallet card artwork, lock screen passcode dialers, 
 
 The app communicates with internal system services over a local loopback tunnel (`10.7.0.1` or `127.0.0.1`) provided by LocalDevVPN. File operations are handled by `AirliftFFI`, a Rust library that interfaces with the AirTraffic service.
 
-> **Compatibility**: AirCard-iOS targets iOS 27.0 or newer (iOS 27+), and also supports iOS 17 – 26 devices via RemotePairing (RSD).
+### 📱 iOS Version Support (iOS 26 – 27+)
+
+AirCard-iOS supports both **iOS 26** and **iOS 27+** (as well as iOS 17+ via RemotePairing):
+
+| Feature / Behavior | iOS 27+ | iOS 26 |
+|---|---|---|
+| **On-device Developer Mode Pairing** | ✅ Available in *Settings › Privacy & Security › Developer Mode* | ❌ Removed by Apple from Settings |
+| **Local lockdown loopback (`:62078`)** | ✅ Supported via LocalDevVPN | ❌ Blocked by Apple (`Broken pipe` / socket rejection) |
+| **RemotePairing RSD Tunnel (`:49152`)** | ✅ Supported | ✅ **Primary method** (requires pairing record with `alt_irk`) |
+| **AirCard Injector / `idevice_pair`** | Optional | **Recommended** (1-click pairing file generation & IPA injection) |
+
+> **How iOS 26 support works**: Starting in iOS 26, Apple removed the built-in Developer Mode pairing menu from Settings and blocked unauthenticated loopback access to `lockdownd:62078`. AirCard-iOS resolves this by establishing an RSD (Remote Service Discovery) tunnel over port `49152`. Pairing once with **[idevice_pair](https://github.com/jkcoxson/idevice_pair)** generates a complete RemotePairing record containing the required 16-byte `alt_irk` key, allowing the app to authenticate and operate seamlessly on iOS 26.
 
 ## Features
 
@@ -46,16 +57,18 @@ The app communicates with internal system services over a local loopback tunnel 
 - Automatically triggers a NeoSpring respring after flashing to apply wallpapers without rebooting your iPhone.
 
 ### On-device pairing
-- Advertises locally over Bonjour so the phone can pair with itself via Settings > Privacy & Security > Developer Mode > Pair with AirCard-iOS.
+- Advertises locally over Bonjour so the phone can pair with itself via Settings > Privacy & Security > Developer Mode > Pair with AirCard-iOS (on supported versions).
 - Reads and syncs pairing records automatically into `aircard_pairing.plist`.
 - Once paired, no computer or external connection is needed.
 - **For iOS versions without on-device Developer Mode pairing (iOS 26+)**: Devices can pair once via [idevice_pair](https://github.com/jkcoxson/idevice_pair) to generate a RemotePairing record with `alt_irk` (port `49152`), or inject it directly into the IPA using **AirCard Injector** (`tools/mac-injector`).
 
 ## Prerequisites
 
-1. **iOS 27+ / iOS 17+**: Exploit and paths target modern iOS versions.
+1. **iOS 26 – 27+**: Compatible with iOS 27+, and iOS 26 (as well as iOS 17+) via RemotePairing (RSD).
 2. **LocalDevVPN**: Running in loopback mode (`10.7.0.1` or `127.0.0.1`) so local connections can reach internal device services.
-3. **Developer Mode pairing**: Pair directly in Settings > Privacy & Security > Developer Mode > Pair with AirCard-iOS, or place/embed an existing pairing plist (`pairingFile.plist` / `aircard_pairing.plist`) in the app.
+3. **Pairing credentials**:
+   - **iOS 27+**: Pair directly in Settings > Privacy & Security > Developer Mode > Pair with AirCard-iOS.
+   - **iOS 26**: Generate a RemotePairing record using `idevice_pair` (or AirCard Injector) and embed/import it as `pairingFile.plist` / `aircard_pairing.plist`.
 
 ## Installation
 
