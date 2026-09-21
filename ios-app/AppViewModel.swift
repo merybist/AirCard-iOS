@@ -86,12 +86,62 @@ final class AppViewModel: ObservableObject {
     @Published var exportedThemeURL: URL? = nil
     @Published var showShareSheet: Bool = false
 
-    var supportsOnDevicePairing: Bool {
-        ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 17
+    var systemMajorVersion: Int {
+        ProcessInfo.processInfo.operatingSystemVersion.majorVersion
     }
 
+    /// iOS 27+ supports on-device Developer Mode pairing in Settings
     var isIOS27OrHigher: Bool {
-        supportsOnDevicePairing
+        systemMajorVersion >= 27
+    }
+
+    /// iOS 26 and lower requires embedded pairing file (injected into IPA) or imported custom plist
+    var isIOS26OrLower: Bool {
+        systemMajorVersion <= 26
+    }
+
+    var supportsOnDevicePairing: Bool {
+        isIOS27OrHigher
+    }
+
+    /// Detects if an embedded pairing file exists in the app bundle (injected into IPA)
+    var embeddedPairingFileName: String? {
+        let bundleNames = ["aircard_pairing", "airlift_pairing", "pairing", "pairingFile"]
+        for name in bundleNames {
+            if let bundleURL = Bundle.main.url(forResource: name, withExtension: "plist") {
+                let size = (try? FileManager.default.attributesOfItem(atPath: bundleURL.path)[.size] as? Int) ?? 0
+                if size > 0 { return "\(name).plist" }
+            }
+        }
+        if let bundlePlists = Bundle.main.urls(forResourcesWithExtension: "plist", subdirectory: nil) {
+            for bURL in bundlePlists {
+                let fname = bURL.lastPathComponent.lowercased()
+                if fname.contains("pairing") || fname.contains("aircard") || fname.contains("airlift") || fname.contains("lockdown") {
+                    let size = (try? FileManager.default.attributesOfItem(atPath: bURL.path)[.size] as? Int) ?? 0
+                    if size > 0 { return bURL.lastPathComponent }
+                }
+            }
+        }
+        if let bundleOther = Bundle.main.urls(forResourcesWithExtension: "mobiledevicepairing", subdirectory: nil) {
+            for bURL in bundleOther {
+                let size = (try? FileManager.default.attributesOfItem(atPath: bURL.path)[.size] as? Int) ?? 0
+                if size > 0 { return bURL.lastPathComponent }
+            }
+        }
+        return nil
+    }
+
+    var hasEmbeddedPairingFile: Bool {
+        embeddedPairingFileName != nil
+    }
+
+    func restoreEmbeddedPairingFile() {
+        guard let name = embeddedPairingFileName else { return }
+        let baseName = (name as NSString).deletingPathExtension
+        let ext = (name as NSString).pathExtension.isEmpty ? "plist" : (name as NSString).pathExtension
+        if let url = Bundle.main.url(forResource: baseName, withExtension: ext) {
+            _ = importPairingFile(from: url, originalName: name)
+        }
     }
 
     // MARK: - Shared

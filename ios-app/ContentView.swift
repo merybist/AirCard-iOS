@@ -430,6 +430,11 @@ struct PairingTab: View {
                                     case .unknown:
                                         EmptyView()
                                     }
+                                    if let emb = vm.embeddedPairingFileName, vm.activeSourceFileName == emb || vm.activeSourceFileName.isEmpty {
+                                        Text("• Embedded")
+                                            .font(.caption2.bold())
+                                            .foregroundStyle(.indigo)
+                                    }
                                 }
                             }
                         } else {
@@ -500,16 +505,159 @@ struct PairingTab: View {
                     Text("The active pairing file will be removed.")
                 }
 
-                // Pairing File Setup (iOS 26+ / Developer Mode Pairing Removed)
-                Section("Import or Embed Pairing File") {
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "info.circle.fill")
-                                .foregroundStyle(.blue)
-                            Text("Pairing File Required")
-                                .font(.subheadline.bold())
+                // iOS 27+ On-Device Pairing Section
+                if vm.isIOS27OrHigher {
+                    Section("Pair on This iPhone (iOS \(vm.systemMajorVersion)+)") {
+                        if vm.pairingPhase == .pairing {
+                            VStack(alignment: .leading, spacing: 12) {
+                                HStack(spacing: 8) {
+                                    ProgressView().scaleEffect(0.85)
+                                    Text(vm.pairingStatus.isEmpty ? "Starting local pairing host…" : vm.pairingStatus)
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                }
+
+                                if let pin = vm.pairingPIN {
+                                    VStack(alignment: .leading, spacing: 12) {
+                                        Text("ENTER THIS PIN ON THIS IPHONE:")
+                                            .font(.caption2.bold().uppercaseSmallCaps())
+                                            .foregroundStyle(.secondary)
+
+                                        HStack(alignment: .center, spacing: 0) {
+                                            Text(pin)
+                                                .font(.system(size: 40, weight: .black, design: .monospaced))
+                                                .foregroundStyle(.orange)
+                                            Spacer()
+                                            Button {
+                                                UIPasteboard.general.string = pin
+                                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                            } label: {
+                                                Label("Copy", systemImage: "doc.on.doc")
+                                                    .font(.caption.bold())
+                                            }
+                                            .buttonStyle(.bordered)
+                                            .tint(.orange)
+                                        }
+
+                                        Text("Settings > Privacy & Security > Developer Mode > Remote Pairing")
+                                            .font(.footnote.weight(.semibold))
+                                            .foregroundStyle(.primary)
+
+                                        Button {
+                                            if let url = URL(string: UIApplication.openSettingsURLString) {
+                                                UIApplication.shared.open(url)
+                                            }
+                                        } label: {
+                                            Label("Open Settings App Now", systemImage: "arrow.up.forward.app")
+                                                .bold()
+                                                .frame(maxWidth: .infinity)
+                                        }
+                                        .buttonStyle(.borderedProminent)
+                                        .tint(.orange)
+                                    }
+                                    .padding(14)
+                                    .background(Color.orange.opacity(0.12))
+                                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                                }
+
+                                Button(role: .cancel) {
+                                    vm.cancelPairing()
+                                } label: {
+                                    Label("Cancel Pairing", systemImage: "xmark")
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.bordered)
+                                .tint(.red)
+                            }
+                        } else {
+                            if !vm.pairingStatus.isEmpty && vm.pairingStatus != "idle" {
+                                Text(vm.pairingStatus)
+                                    .font(.caption)
+                                    .foregroundStyle(
+                                        vm.pairingStatus.contains("✅") ? .green :
+                                        vm.pairingStatus.contains("❌") || vm.pairingStatus.contains("failed") ? .red :
+                                        .secondary
+                                    )
+                            }
+
+                            Button {
+                                vm.startPairing()
+                            } label: {
+                                Label(
+                                    vm.hasPairingFile ? "Re-Pair This iPhone" : "Pair This iPhone",
+                                    systemImage: "antenna.radiowaves.left.and.right"
+                                )
+                                .bold()
+                                .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.large)
+
+                            if vm.hasPairingFile {
+                                Button(role: .destructive) {
+                                    vm.resetAndRePair()
+                                } label: {
+                                    Label("Reset Identity & Clean Re-Pair", systemImage: "arrow.triangle.2.circlepath")
+                                        .font(.caption)
+                                        .frame(maxWidth: .infinity)
+                                }
+                                .buttonStyle(.borderless)
+                            }
                         }
-                        Text("On iOS 26+, on-device Developer Mode pairing is unavailable. You can either embed your pairing file directly into the IPA using iLoader / sideloading tools, or import it below using the Files app.")
+                    }
+                }
+
+                // iOS 26 Notice (On-Device pairing unavailable due to removed Developer Mode menu & blocked loopback)
+                if vm.isIOS26OrLower {
+                    Section {
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "exclamationmark.shield.fill")
+                                    .font(.title3)
+                                    .foregroundStyle(.orange)
+                                Text("iOS \(vm.systemMajorVersion) Pairing Notice")
+                                    .font(.subheadline.bold())
+                            }
+                            Text("On iOS 26, Apple removed Developer Mode pairing from Settings and blocked unauthenticated loopback lockdownd connections. On-device pairing is unavailable.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text("Use an embedded pairing file injected into the IPA via AirCard Injector, or import your custom pairing file (.plist) from the Files app below.")
+                                .font(.caption.bold())
+                                .foregroundStyle(.primary)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+
+                // Embedded IPA Pairing File Detection (iOS 26 and iOS 27+)
+                if let embeddedName = vm.embeddedPairingFileName {
+                    Section("Embedded Pairing File (IPA Bundle)") {
+                        HStack(spacing: 10) {
+                            Image(systemName: "cube.box.fill")
+                                .font(.title3)
+                                .foregroundStyle(.indigo)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(embeddedName)
+                                    .font(.subheadline.bold())
+                                Text("Detected inside app bundle (injected into IPA)")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button("Use Embedded") {
+                                vm.restoreEmbeddedPairingFile()
+                            }
+                            .font(.caption.bold())
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                        }
+                    }
+                }
+
+                // Pairing File Setup (Custom File from Files App)
+                Section(vm.isIOS27OrHigher ? "Import Pairing File (Alternative)" : "Import Custom Pairing File") {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Select a pairing record (.plist / .mobiledevicepairing) generated from idevice_pair or AirCard Injector:")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
