@@ -21,6 +21,10 @@
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>localdevvpn</string>
+		<string>prefs</string>
+		<string>app-prefs</string>
+		<string>App-prefs</string>
+		<string>App-Prefs</string>
 	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
@@ -77,9 +81,80 @@
 				<string>com.apple.property-list</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>PosterBoard Wallpaper</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.aircard.tendies</string>
+			</array>
+		</dict>
 	</array>
 	<key>UTImportedTypeDeclarations</key>
 	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.aircard.passthm</string>
+			<key>UTTypeDescription</key>
+			<string>Passcode Theme Archive</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+				<string>public.archive</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>passthm</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.aircard.tendies</string>
+			<key>UTTypeDescription</key>
+			<string>PosterBoard Wallpaper Archive</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+				<string>public.archive</string>
+				<string>public.zip-archive</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>tendies</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.aircard.tendies</string>
+			<key>UTTypeDescription</key>
+			<string>PosterBoard Wallpaper Archive</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+				<string>public.archive</string>
+				<string>public.zip-archive</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>tendies</string>
+				</array>
+			</dict>
+		</dict>
 		<dict>
 			<key>UTTypeIdentifier</key>
 			<string>com.aircard.passthm</string>

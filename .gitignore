@@ -12,6 +12,10 @@ build/
 *.dSYM.zip
 *.dSYM
 
+# Python tooling
+__pycache__/
+*.pyc
+
 # Temporary / Staging artifacts
 *.tmp
 *.log

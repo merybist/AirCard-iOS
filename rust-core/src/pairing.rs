@@ -94,10 +94,14 @@ pub unsafe fn run_host(
     let saved_alt_irk = parse_alt_irk(&opt_str(host_alt_irk_hex, ""));
     let cbs = Cbs { ready: ready_cb, pin: pin_cb, ctx };
 
-    match idevice_ffi::run_sync_local(async_run_host(
-        bind_addr, port, name, model, out_path, saved_alt_irk, cbs,
-    )) {
-        Ok((dev_name, dev_model, udid, path, irk_hex)) => {
+    let res = crate::ffi_util::run_with_large_stack("al_pairing_run_host", move || {
+        idevice_ffi::run_sync_local(async_run_host(
+            bind_addr, port, name, model, out_path, saved_alt_irk, cbs,
+        ))
+    });
+
+    match res {
+        Ok(Ok((dev_name, dev_model, udid, path, irk_hex))) => {
             (*out).device_name = cstr(dev_name);
             (*out).device_model = cstr(dev_model);
             (*out).device_udid = cstr(udid);
@@ -105,8 +109,12 @@ pub unsafe fn run_host(
             (*out).host_alt_irk_hex = cstr(irk_hex);
             0
         }
-        Err(e) => {
+        Ok(Err(e)) => {
             (*out).error = cstr(e);
+            1
+        }
+        Err(panic_msg) => {
+            (*out).error = cstr(panic_msg);
             1
         }
     }

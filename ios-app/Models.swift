@@ -16,20 +16,27 @@ struct CardItem: Identifiable, Equatable {
         customImage ?? (customImageData.flatMap { UIImage(data: $0) })
     }
 
-    /// Normalizes a card identifier pasted from a file name or scanner result.
+    /// Normalizes and cleans a card identifier, stripping paths, extensions (.pkpass, .cache),
+    /// quotes, and whitespace. Validates length and format.
     static func cleanCardId(_ raw: String) -> String? {
         var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         s = s.trimmingCharacters(in: CharacterSet(charactersIn: "'\",()<>;[]{}"))
         if s.contains("/") {
             s = (s as NSString).lastPathComponent
         }
-        for ext in [".pkpass", ".cache", ".pkcache"] where s.hasSuffix(ext) {
-            s = String(s.dropLast(ext.count))
+        for ext in [".pkpass", ".cache", ".pkcache"] {
+            if s.hasSuffix(ext) {
+                s = String(s.dropLast(ext.count))
+            }
         }
         s = s.trimmingCharacters(in: CharacterSet(charactersIn: "'\",()<>;[]{}. "))
-        guard s.count >= 20, s.count <= 64, !s.contains("/") else { return nil }
-        guard !(s.count == 36 && s.filter({ $0 == "-" }).count == 4) else { return nil }
-        return s
+        if s.count >= 20 && s.count <= 64 && !s.contains("/") {
+            if s.count == 36 && s.filter({ $0 == "-" }).count == 4 {
+                return nil // UUID format, not a card hash
+            }
+            return s
+        }
+        return nil
     }
 
     static func == (lhs: CardItem, rhs: CardItem) -> Bool {
@@ -45,6 +52,7 @@ enum AppTab: String, CaseIterable, Identifiable {
     case pairing = "Pairing"
     case walletCards = "Wallet Cards"
     case passcodeThemes = "Passcode"
+    case wallpapers = "Wallpapers"
     var id: String { rawValue }
 }
 
@@ -263,20 +271,28 @@ enum ImageEngine {
 
     /// Prepares all exact resolution files for Apple Wallet pass skins.
     /// Perfectly fits standard, Plus, Pro, and Pro Max screens.
+    /// Emits cardBackgroundCombined, diffuse, background, and strip so all Apple Pay passes are covered.
     static func prepareAllCardSkins(from image: UIImage) -> [String: Data] {
         let normalized = normalizeAndDownsample(image, maxDimension: 2560)
         var skins: [String: Data] = [:]
 
-        // Main card background (combined with icon / logo)
-        // Apple Wallet pass renderer requires @3x and @2x of cardBackgroundCombined.png,
-        // and cardBackgroundCombined.pdf for PDF-backed transit cards (e.g. Suica, Pasmo).
-        if let bg3x = resizeImage(normalized, targetSize: CGSize(width: 1536, height: 969)) {
-            skins["cardBackgroundCombined@3x.png"] = bg3x
+        let bg3x = resizeImage(normalized, targetSize: CGSize(width: 1536, height: 969))
+        let bg2x = resizeImage(normalized, targetSize: CGSize(width: 1024, height: 646))
+
+        if let data3x = bg3x {
+            skins["cardBackgroundCombined@3x.png"] = data3x
+            skins["diffuse@3x.png"] = data3x
+            skins["background@3x.png"] = data3x
+            skins["strip@3x.png"] = data3x
         }
-        if let bg2x = resizeImage(normalized, targetSize: CGSize(width: 1024, height: 646)) {
-            skins["cardBackgroundCombined@2x.png"] = bg2x
+        if let data2x = bg2x {
+            skins["cardBackgroundCombined@2x.png"] = data2x
+            skins["diffuse@2x.png"] = data2x
+            skins["background@2x.png"] = data2x
+            skins["strip@2x.png"] = data2x
         }
 
+        // Vector PDF variants for Suica, Pasmo, ICOCA, and transit/transport passes
         let pdfRect = CGRect(origin: .zero, size: CGSize(width: 1536, height: 969))
         let pdfRenderer = UIGraphicsPDFRenderer(bounds: pdfRect)
         let pdfData = pdfRenderer.pdfData { ctx in
@@ -284,6 +300,8 @@ enum ImageEngine {
             normalized.draw(in: pdfRect)
         }
         skins["cardBackgroundCombined.pdf"] = pdfData
+        skins["background.pdf"] = pdfData
+        skins["strip.pdf"] = pdfData
 
         return skins
     }

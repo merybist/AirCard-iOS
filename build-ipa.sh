@@ -10,13 +10,6 @@ echo "==> Building AirCard-iOS ($CONFIG)..."
 rm -rf build/DerivedData build/Payload build/*.app build/*.ipa
 mkdir -p build
 
-if [ ! -d "AirCard-iOS.xcodeproj" ] || [ "project.yml" -nt "AirCard-iOS.xcodeproj" ]; then
-    if command -v xcodegen &> /dev/null; then
-        echo "==> Generating Xcode project via xcodegen..."
-        xcodegen generate
-    fi
-fi
-
 xcodebuild -project AirCard-iOS.xcodeproj \
     -scheme AirCard-iOS \
     -configuration "$CONFIG" \

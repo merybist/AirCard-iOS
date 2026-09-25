@@ -67,6 +67,16 @@ final class AppViewModel: ObservableObject {
     @Published var passthmFlashProgress: Double = 0
     @Published var passthmFlashLog: [String] = []
 
+    // MARK: - Tendies / Wallpapers tab
+    @Published var tendieItems: [TendieItem] = []
+    @Published var posterBoardContainer: String = ""
+    @Published var isDetectingContainer: Bool = false
+    @Published var resetPBProtections: Bool = true
+    @Published var tendiesFlashPhase: FlashPhase = .idle
+    @Published var tendiesFlashProgress: Double = 0
+    @Published var tendiesFlashLog: [String] = []
+    @Published var isNeoSpringing: Bool = false
+
     // MARK: - AirCard UI States & Properties
     static var detectedDeviceLanguage: PasscodeLanguageTarget {
         let code = Locale.preferredLanguages.first?.components(separatedBy: "-").first?.lowercased() ?? "en"
@@ -194,6 +204,8 @@ final class AppViewModel: ObservableObject {
         loadSavedCards()
         refreshNetworkStatus()
         scanDocumentsDirectory()
+        posterBoardContainer = UserDefaults.standard.string(forKey: "aircard.posterboard_container") ?? ""
+        loadSavedTendies()
 
         // Hook Rust log output into our log array.
         AppViewModel.sharedLogSink = { [weak self] line in
@@ -216,6 +228,42 @@ final class AppViewModel: ObservableObject {
 
         // Find .passthm themes
         documentsThemes = items.filter { $0.hasSuffix(".passthm") }.sorted()
+
+        // Auto-discover any .tendies dropped into Documents or Documents/Tendies
+        scanDocumentsForTendies()
+    }
+
+    func scanDocumentsForTendies() {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let tendiesDir = TendiesEngine.tendiesStorageDirectory
+
+        var foundURLs: [URL] = []
+        if let rootItems = try? FileManager.default.contentsOfDirectory(at: docs, includingPropertiesForKeys: nil) {
+            for u in rootItems where u.pathExtension.lowercased() == "tendies" {
+                let target = tendiesDir.appendingPathComponent(u.lastPathComponent)
+                if u.path != target.path && !FileManager.default.fileExists(atPath: target.path) {
+                    try? FileManager.default.copyItem(at: u, to: target)
+                }
+                foundURLs.append(target)
+            }
+        }
+        if let storedItems = try? FileManager.default.contentsOfDirectory(at: tendiesDir, includingPropertiesForKeys: nil) {
+            for u in storedItems where u.pathExtension.lowercased() == "tendies" {
+                if !foundURLs.contains(u) {
+                    foundURLs.append(u)
+                }
+            }
+        }
+
+        let newURLs = foundURLs.filter { url in
+            !tendieItems.contains(where: { $0.fileName == url.lastPathComponent })
+        }
+
+        guard !newURLs.isEmpty else { return }
+
+        Task {
+            await self.importTendieFiles(urls: newURLs)
+        }
     }
 
     @discardableResult
@@ -338,6 +386,7 @@ final class AppViewModel: ObservableObject {
     func cancelPairing() {
         PairingController.shared.softCancel()
         pairingPhase = .idle
+        pairingStatus = ""
     }
 
     func deletePairingFile() {
@@ -380,10 +429,14 @@ final class AppViewModel: ObservableObject {
 
 
     func toggleCardScanning() {
-        if isScanningCards {
-            stopCardScanning()
-        } else {
-            startCardScanning()
+        var t = Transaction()
+        t.disablesAnimations = true
+        withTransaction(t) {
+            if isScanningCards {
+                stopCardScanning()
+            } else {
+                startCardScanning()
+            }
         }
     }
 
@@ -401,13 +454,17 @@ final class AppViewModel: ObservableObject {
             return
         }
 
-        isScanningCards = true
-        scanStatusText = "Open Apple Pay (double-click Side button) and tap your card…"
+        var t = Transaction()
+        t.disablesAnimations = true
+        withTransaction(t) {
+            isScanningCards = true
+            scanStatusText = "Open Apple Pay (double-click Side button) and tap your card…"
+        }
         log.append("Started live card scanner…")
 
         let pairingPath = PairingController.pairingFilePath()
 
-        Task.detached {
+        let thread = Thread {
             var outError: UnsafeMutablePointer<CChar>? = nil
 
             let rc = pairingPath.withCString { pairC in
@@ -416,8 +473,17 @@ final class AppViewModel: ObservableObject {
                     { _, line in
                         guard let line = line else { return }
                         let lineStr = String(cString: line)
-                        DispatchQueue.main.async {
-                            AppViewModel.shared?.processSyslogLine(lineStr)
+                        let lower = lineStr.lowercased()
+                        // Pre-filter on background thread to prevent flooding the main runloop
+                        if lower.contains("pass") ||
+                           lower.contains("card") ||
+                           lower.contains("stockholm") ||
+                           lower.contains("wallet") ||
+                           lower.contains("nanopass") ||
+                           lower.contains("verificationcheck") {
+                            DispatchQueue.main.async {
+                                AppViewModel.shared?.processSyslogLine(lineStr)
+                            }
                         }
                     },
                     nil,
@@ -428,7 +494,7 @@ final class AppViewModel: ObservableObject {
             let errStr = outError.flatMap { String(validatingUTF8: $0) }
             if let p = outError { al_string_free(p) }
 
-            await MainActor.run {
+            DispatchQueue.main.async {
                 guard let vm = AppViewModel.shared else { return }
                 vm.isScanningCards = false
                 if rc != 0 {
@@ -442,12 +508,20 @@ final class AppViewModel: ObservableObject {
                 }
             }
         }
+        thread.name = "AirCard.SyslogScanner"
+        thread.stackSize = 4 * 1024 * 1024 // 4 MB stack
+        thread.qualityOfService = .userInitiated
+        thread.start()
     }
 
     func stopCardScanning() {
         al_syslog_stream_stop()
-        isScanningCards = false
-        scanStatusText = "Scanning stopped. Total cards: \(cards.count)."
+        var t = Transaction()
+        t.disablesAnimations = true
+        withTransaction(t) {
+            isScanningCards = false
+            scanStatusText = "Scanning stopped. Total cards: \(cards.count)."
+        }
         saveCards()
     }
 
@@ -486,17 +560,15 @@ final class AppViewModel: ObservableObject {
             let matches = regex.matches(in: line, range: NSRange(line.startIndex..., in: line))
             for m in matches {
                 if m.numberOfRanges > 1, let r = Range(m.range(at: 1), in: line) {
-                    let candidate = String(line[r]).trimmingCharacters(in: CharacterSet(charactersIn: "'\",."))
-                    if candidate.count == 36 && candidate.contains("-") { continue }
+                    let candidateRaw = String(line[r])
+                    guard let candidate = CardItem.cleanCardId(candidateRaw) else { continue }
                     if Self.dummyCardHashes.contains(candidate) { continue }
-                    if candidate.count >= 20 && candidate.count <= 44 {
-                        if !self.cards.contains(where: { $0.id == candidate }) {
-                            self.cards.append(CardItem(id: candidate, isSelected: true))
-                            self.saveCards()
-                            self.scanStatusText = "Found card: \(candidate)"
-                            self.log.append("Found card: \(candidate)")
-                            UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
-                        }
+                    if !self.cards.contains(where: { $0.id == candidate }) {
+                        self.cards.append(CardItem(id: candidate, isSelected: true))
+                        self.saveCards()
+                        self.scanStatusText = "Found card: \(candidate)"
+                        self.log.append("Found card: \(candidate)")
+                        UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
                     }
                 }
             }
@@ -521,10 +593,17 @@ final class AppViewModel: ObservableObject {
                 break
             }
         }
-        cards = foundHashes.filter { !Self.dummyCardHashes.contains($0) }.map { id in
+        var unique: [String] = []
+        for raw in foundHashes {
+            if let clean = CardItem.cleanCardId(raw), !unique.contains(clean) {
+                unique.append(clean)
+            }
+        }
+        cards = unique.filter { !Self.dummyCardHashes.contains($0) }.map { id in
             let path = Self.cardImagePath(for: id)
             let data = try? Data(contentsOf: path)
-            let img = data.flatMap { UIImage(data: $0) }
+            // Downsampled thumbnail keeps RAM minimal, preventing Jetsam OOM kills
+            let img = data.flatMap { ImageEngine.safeImageFromData($0, maxDimension: 512) }
             return CardItem(id: id, customImageData: data, customImage: img)
         }
     }
@@ -564,9 +643,8 @@ final class AppViewModel: ObservableObject {
         let parts = raw.components(separatedBy: CharacterSet(charactersIn: " \n\r\t,;"))
         var added = 0
         for p in parts {
-            let clean = p.trimmingCharacters(in: .whitespacesAndNewlines)
-            if clean.count >= 16 && clean.count <= 64 &&
-                !cards.contains(where: { $0.id == clean }) {
+            if let clean = CardItem.cleanCardId(p),
+               !cards.contains(where: { $0.id == clean }) {
                 cards.append(CardItem(id: clean))
                 added += 1
             }
@@ -600,9 +678,12 @@ final class AppViewModel: ObservableObject {
 
     func setCardImage(for cardId: String, image: UIImage) {
         guard let idx = cards.firstIndex(where: { $0.id == cardId }) else { return }
-        cards[idx].customImage = image
+        // Keep a lightweight thumbnail in memory for responsive UI & OOM protection
+        let thumb = ImageEngine.normalizeAndDownsample(image, maxDimension: 512)
+        cards[idx].customImage = thumb
 
-        let path = Self.cardImagePath(for: cardId)
+        let actualId = cards[idx].id
+        let path = Self.cardImagePath(for: actualId)
         // Generate full resolution PNG data asynchronously in background
         Task.detached(priority: .userInitiated) {
             let data = ImageEngine.prepareCardImage(from: image)
@@ -610,7 +691,7 @@ final class AppViewModel: ObservableObject {
                 try? data.write(to: path)
             }
             await MainActor.run {
-                if let i = AppViewModel.shared?.cards.firstIndex(where: { $0.id == cardId }) {
+                if let i = AppViewModel.shared?.cards.firstIndex(where: { $0.id == actualId }) {
                     AppViewModel.shared?.cards[i].customImageData = data
                 }
             }
@@ -621,7 +702,6 @@ final class AppViewModel: ObservableObject {
 
     var canFlashCards: Bool {
         hasPairingFile &&
-        vpnUp &&
         cardFlashPhase != .running &&
         cards.contains { $0.isSelected && ($0.customImage != nil || $0.customImageData != nil) }
     }
@@ -636,6 +716,10 @@ final class AppViewModel: ObservableObject {
         cardFlashLog.removeAll()
         errorMessage = nil
 
+        if !vpnUp {
+            cardFlashLog.append("⚠️ Notice: Loopback VPN not detected, attempting direct loopback (127.0.0.1)...")
+        }
+
         let pairingPath = PairingController.pairingFilePath()
 
         Task.detached { [weak self] in
@@ -643,13 +727,24 @@ final class AppViewModel: ObservableObject {
             let total = Double(selected.count)
             var successCount = 0
             for (i, card) in selected.enumerated() {
+                let cleanId = CardItem.cleanCardId(card.id) ?? card.id
+                let safeCardId = cleanId.replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "+", with: "-")
+
                 await MainActor.run {
-                    self.cardFlashLog.append("[\(i+1)/\(selected.count)] Flashing card \(card.id.prefix(12))…")
+                    self.cardFlashLog.append("[\(i+1)/\(selected.count)] Flashing card \(cleanId.prefix(12))…")
                     self.cardFlashProgress = Double(i) / total
                 }
 
-                guard let sourceImg = await MainActor.run(body: { card.customImage ?? card.customImageData.flatMap { UIImage(data: $0) } }) else {
-                    await MainActor.run { self.cardFlashLog.append("  ⚠️ No image for card \(card.id.prefix(8))") }
+                // Load source image at full resolution on demand to save memory
+                let sourceImg: UIImage? = {
+                    if let d = card.customImageData, let img = UIImage(data: d) { return img }
+                    let p = Self.cardImagePath(for: cleanId)
+                    if let d = try? Data(contentsOf: p), let img = UIImage(data: d) { return img }
+                    return card.customImage
+                }()
+
+                guard let sourceImg = sourceImg else {
+                    await MainActor.run { self.cardFlashLog.append("  ⚠️ No image for card \(cleanId.prefix(8))") }
                     continue
                 }
 
@@ -661,17 +756,17 @@ final class AppViewModel: ObservableObject {
                 }
 
                 let stageCardDir = FileManager.default.temporaryDirectory
-                    .appendingPathComponent("airlift_card_\(card.id)_\(UUID().uuidString)")
+                    .appendingPathComponent("airlift_card_\(safeCardId)_\(UUID().uuidString)")
                 try? FileManager.default.createDirectory(at: stageCardDir, withIntermediateDirectories: true)
 
                 for (name, data) in allSkins {
                     try? data.write(to: stageCardDir.appendingPathComponent(name))
                 }
 
-                let pkpassTarget = "/var/mobile/Library/Passes/Cards/\(card.id).pkpass"
+                let pkpassTarget = "/var/mobile/Library/Passes/Cards/\(cleanId).pkpass"
 
                 await MainActor.run {
-                    self.cardFlashLog.append("  ⚡ Injecting skins into \(card.id.prefix(10)).pkpass…")
+                    self.cardFlashLog.append("  ⚡ Injecting skins into \(cleanId.prefix(10)).pkpass…")
                 }
 
                 var writeOk = false
@@ -712,7 +807,7 @@ final class AppViewModel: ObservableObject {
                     self.cardFlashLog.append("  ✅ Skins applied! Invalidating pass cache…")
                 }
 
-                // 2. Invalidate cache leaves
+                // 2. Invalidate cache leaves (best effort: some iOS versions don't have .cache or .pkcache folders)
                 let stageInvDir = FileManager.default.temporaryDirectory
                     .appendingPathComponent("airlift_inv_\(UUID().uuidString)")
                 try? FileManager.default.createDirectory(at: stageInvDir, withIntermediateDirectories: true)
@@ -721,7 +816,7 @@ final class AppViewModel: ObservableObject {
                 }
 
                 for ext in [".cache", ".pkcache"] {
-                    let cacheTarget = "/var/mobile/Library/Passes/Cards/\(card.id)\(ext)"
+                    let cacheTarget = "/var/mobile/Library/Passes/Cards/\(cleanId)\(ext)"
                     await withCheckedContinuation { cont in
                         DispatchQueue.global(qos: .userInitiated).async {
                             var outError: UnsafeMutablePointer<CChar>? = nil
@@ -864,7 +959,7 @@ final class AppViewModel: ObservableObject {
     // MARK: - Passthm Flash
 
     var canFlashPassthm: Bool {
-        guard hasPairingFile && vpnUp && passthmFlashPhase != .running else { return false }
+        guard hasPairingFile && passthmFlashPhase != .running else { return false }
         switch passcodeMode {
         case .applyTheme:
             return loadedTheme != nil && !(loadedTheme?.keysPreview.isEmpty ?? true)
@@ -899,6 +994,10 @@ final class AppViewModel: ObservableObject {
         passthmFlashProgress = 0
         passthmFlashLog.removeAll()
         errorMessage = nil
+
+        if !vpnUp {
+            passthmFlashLog.append("⚠️ Notice: Loopback VPN not detected, attempting direct loopback (127.0.0.1)...")
+        }
 
         let pairingPath = PairingController.pairingFilePath()
         let targetVer = targetTelephonyVersion
@@ -1115,11 +1214,154 @@ final class AppViewModel: ObservableObject {
         log.append(line)
     }
 
+    // MARK: - Tendies / Wallpapers
+
+    func loadSavedTendies() {
+        if let data = UserDefaults.standard.data(forKey: "aircard.saved_tendies"),
+           let items = try? JSONDecoder().decode([TendieItem].self, from: data) {
+            self.tendieItems = items.filter { FileManager.default.fileExists(atPath: $0.fileURL.path) }
+        }
+    }
+
+    func saveTendieItems() {
+        if let data = try? JSONEncoder().encode(tendieItems) {
+            UserDefaults.standard.set(data, forKey: "aircard.saved_tendies")
+        }
+    }
+
+    func importTendieFiles(urls: [URL]) async {
+        guard !urls.isEmpty else { return }
+        var importedCount = 0
+        var lastImportedName = ""
+        for url in urls {
+            do {
+                let item = try await TendiesEngine.shared.importTendie(from: url)
+                await MainActor.run {
+                    self.tendieItems.removeAll(where: { $0.fileName == item.fileName })
+                    self.tendieItems.append(item)
+                    self.saveTendieItems()
+                    importedCount += 1
+                    lastImportedName = item.name
+                }
+            } catch {
+                await MainActor.run {
+                    self.errorMessage = "Failed to import \(url.lastPathComponent): \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
+    func deleteTendie(item: TendieItem) {
+        try? FileManager.default.removeItem(at: item.fileURL)
+        tendieItems.removeAll(where: { $0.id == item.id })
+        saveTendieItems()
+    }
+
+    func autoDetectPosterBoardContainer(silent: Bool = false) async {
+        let pairingPath = PairingController.pairingFilePath()
+        guard FileManager.default.fileExists(atPath: pairingPath) else {
+            if !silent {
+                await MainActor.run {
+                    self.errorMessage = "No pairing file active. Pair your device first in the Pairing tab."
+                }
+            }
+            return
+        }
+
+        await MainActor.run { self.isDetectingContainer = true }
+        defer {
+            Task { @MainActor in self.isDetectingContainer = false }
+        }
+
+        do {
+            let container = try await TendiesEngine.shared.detectPosterBoardContainer(pairingPath: pairingPath)
+            await MainActor.run {
+                self.posterBoardContainer = container
+                UserDefaults.standard.set(container, forKey: "aircard.posterboard_container")
+            }
+        } catch {
+            if !silent {
+                await MainActor.run {
+                    self.errorMessage = "Auto-detect failed: \(error.localizedDescription)\nEnsure LocalDevVPN is connected and device is unlocked."
+                }
+            }
+        }
+    }
+
+    func flashSelectedTendies() async {
+        let selected = tendieItems.filter { $0.isSelected }
+        guard !selected.isEmpty else {
+            errorMessage = "No wallpapers selected to flash."
+            return
+        }
+
+        let pairingPath = PairingController.pairingFilePath()
+        guard FileManager.default.fileExists(atPath: pairingPath) else {
+            errorMessage = "No pairing file active. Please pair your device first."
+            return
+        }
+
+        var container = posterBoardContainer.trimmingCharacters(in: .whitespacesAndNewlines)
+        if container.isEmpty {
+            do {
+                container = try await TendiesEngine.shared.detectPosterBoardContainer(pairingPath: pairingPath)
+                self.posterBoardContainer = container
+                UserDefaults.standard.set(container, forKey: "aircard.posterboard_container")
+            } catch {
+                errorMessage = "PosterBoard container could not be found automatically. Ensure LocalDevVPN is connected and iPhone is unlocked."
+                return
+            }
+        }
+
+        tendiesFlashPhase = .running
+        tendiesFlashProgress = 0
+        tendiesFlashLog = []
+
+        do {
+            try await TendiesEngine.shared.flashTendies(
+                items: selected,
+                containerPath: container,
+                resetProtections: resetPBProtections,
+                pairingPath: pairingPath,
+                log: { [weak self] line in
+                    DispatchQueue.main.async {
+                        self?.tendiesFlashLog.append(line)
+                    }
+                },
+                progress: { [weak self] p in
+                    DispatchQueue.main.async {
+                        self?.tendiesFlashProgress = p
+                    }
+                }
+            )
+            tendiesFlashPhase = .done(ok: true)
+            tendiesFlashProgress = 1.0
+            tendiesFlashLog.append("🎉 Wallpapers applied successfully!")
+            tendiesFlashLog.append("⚡ Triggering NeoSpring respring...")
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+                self?.isNeoSpringing = true
+                RespringHelper.triggerNeoSpring()
+            }
+        } catch {
+            tendiesFlashLog.append("❌ Error: \(error.localizedDescription)")
+            tendiesFlashPhase = .done(ok: false)
+        }
+    }
+
+    func respringDevice() {
+        tendiesFlashLog.append("⚡ Triggering NeoSpring respring...")
+        isNeoSpringing = true
+        RespringHelper.triggerNeoSpring()
+    }
+
     func reset() {
         cardFlashPhase = .idle
         cardFlashProgress = 0
         passthmFlashPhase = .idle
         passthmFlashProgress = 0
+        tendiesFlashPhase = .idle
+        tendiesFlashProgress = 0
         errorMessage = nil
     }
 }

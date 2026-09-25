@@ -53,6 +53,9 @@ enum NetworkStatus {
     }
 
     private static func isLoopbackTunnelUp(in ifs: [Interface], deviceIP: String) -> Bool {
+        if ifs.contains(where: { isTunnelInterface($0.name) }) {
+            return true
+        }
         guard let target = ipv4Value(deviceIP) else {
             return false
         }
