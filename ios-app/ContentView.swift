@@ -400,6 +400,7 @@ struct ContentView: View {
 struct PairingTab: View {
     @EnvironmentObject var vm: AppViewModel
     @State private var showDeleteConfirm = false
+    @State private var showFilePicker = false
     @State private var showCredits = false
 
     var body: some View {
@@ -683,6 +684,19 @@ struct PairingTab: View {
             }
             .sheet(isPresented: $showCredits) {
                 CreditsSheet()
+            }
+            .sheet(isPresented: $showFilePicker) {
+                DocumentPickerView(allowedContentTypes: [
+                    UTType(filenameExtension: "plist") ?? .propertyList,
+                    UTType(filenameExtension: "mobiledevicepairing") ?? .data,
+                    UTType(filenameExtension: "mobilepair") ?? .data,
+                    .propertyList,
+                    .xmlPropertyList
+                ]) { pickedURL in
+                    if !vm.importPairingFile(from: pickedURL, originalName: pickedURL.lastPathComponent) {
+                        vm.errorMessage = "Failed to read or save pairing file"
+                    }
+                }
             }
             .onAppear {
                 vm.refreshNetworkStatus()
