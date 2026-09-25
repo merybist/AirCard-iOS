@@ -22,7 +22,7 @@ struct AirCardApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            AirCardFeatureRootView()
                 .environmentObject(vm)
         }
     }

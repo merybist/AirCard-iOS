@@ -98,6 +98,30 @@ int32_t al_exploit_write_dir(const char *pairing_path,
                              void *ctx,
                              char **out_error);
 
+// Destructively export one device file to a local app path.
+// IMPORTANT: on success, `device_path` has been moved out of its original
+// location by ATAirlock. Its exact bytes are persisted at `output_path`.
+// The caller must replace or restore the device file as part of the same
+// higher-level transaction.
+// Returns 0 on success, 1 on error (with out_error set).
+int32_t al_exploit_export_file(const char *pairing_path,
+                               const char *device_path,
+                               const char *output_path,
+                               ALLogCallback log_cb,
+                               void *ctx,
+                               char **out_error);
+
+// Inject an entire directory `folder_path` into `target_parent_dir/dest_name` on the device.
+// Preserves complete folder hierarchy and all internal assets in one AirTraffic operation.
+// Returns 0 on success, 1 on error (with out_error set).
+int32_t al_exploit_inject_folder(const char *pairing_path,
+                                 const char *folder_path,
+                                 const char *target_parent_dir,
+                                 const char *dest_name,
+                                 ALLogCallback log_cb,
+                                 void *ctx,
+                                 char **out_error);
+
 // ---------------------------------------------------------------------------
 // Syslog Stream / Live Card Detection
 // ---------------------------------------------------------------------------
@@ -116,6 +140,25 @@ void al_syslog_stream_stop(void);
 
 // Extract all files from a .passthm archive into dest_dir. Returns 0 on success.
 int32_t al_passthm_extract(const char *archive_path, const char *dest_dir);
+
+// Extract all files and directories from a zip archive into dest_dir. Returns 0 on success.
+int32_t al_zip_extract_all(const char *archive_path, const char *dest_dir);
+
+// Look up the Data Application Container directory for a bundle ID (e.g. "com.apple.PosterBoard").
+// Blocks until resolved or errored. Returns 0 on success, with out_container set.
+int32_t al_find_app_container(const char *pairing_path,
+                             const char *bundle_id,
+                             ALLogCallback log_cb,
+                             void *ctx,
+                             char **out_container,
+                             char **out_error);
+
+// Restart device / respring via Diagnostics Relay over the pairing tunnel.
+// Blocks until sent. Returns 0 on success.
+int32_t al_device_respring(const char *pairing_path,
+                          ALLogCallback log_cb,
+                          void *ctx,
+                          char **out_error);
 
 
 #ifdef __cplusplus

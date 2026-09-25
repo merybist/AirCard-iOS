@@ -503,7 +503,7 @@ final class AppViewModel: ObservableObject {
         }
     }
 
-    private func cardImagePath(for cardId: String) -> URL {
+    nonisolated static func cardImagePath(for cardId: String) -> URL {
         let safeId = cardId.replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "+", with: "-")
         let docDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let cardsDir = docDir.appendingPathComponent("WalletCards", isDirectory: true)
@@ -522,7 +522,7 @@ final class AppViewModel: ObservableObject {
             }
         }
         cards = foundHashes.filter { !Self.dummyCardHashes.contains($0) }.map { id in
-            let path = cardImagePath(for: id)
+            let path = Self.cardImagePath(for: id)
             let data = try? Data(contentsOf: path)
             let img = data.flatMap { UIImage(data: $0) }
             return CardItem(id: id, customImageData: data, customImage: img)
@@ -531,7 +531,7 @@ final class AppViewModel: ObservableObject {
 
     func clearAllCards() {
         for card in cards {
-            let path = cardImagePath(for: card.id)
+            let path = Self.cardImagePath(for: card.id)
             try? FileManager.default.removeItem(at: path)
         }
         cards.removeAll()
@@ -585,7 +585,7 @@ final class AppViewModel: ObservableObject {
             cards.removeAll { $0.id == id }
         }
         saveCards()
-        let path = cardImagePath(for: id)
+        let path = Self.cardImagePath(for: id)
         try? FileManager.default.removeItem(at: path)
     }
 
@@ -594,7 +594,7 @@ final class AppViewModel: ObservableObject {
             cards[idx].customImage = nil
             cards[idx].customImageData = nil
         }
-        let path = cardImagePath(for: cardId)
+        let path = Self.cardImagePath(for: cardId)
         try? FileManager.default.removeItem(at: path)
     }
 
@@ -602,7 +602,7 @@ final class AppViewModel: ObservableObject {
         guard let idx = cards.firstIndex(where: { $0.id == cardId }) else { return }
         cards[idx].customImage = image
 
-        let path = cardImagePath(for: cardId)
+        let path = Self.cardImagePath(for: cardId)
         // Generate full resolution PNG data asynchronously in background
         Task.detached(priority: .userInitiated) {
             let data = ImageEngine.prepareCardImage(from: image)

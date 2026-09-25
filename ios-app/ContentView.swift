@@ -487,12 +487,6 @@ struct PairingTab: View {
                         .padding(.vertical, 2)
                     }
 
-                    Button {
-                        vm.refreshPairingFile()
-                    } label: {
-                        Label("Scan App Documents Folder", systemImage: "arrow.clockwise")
-                            .font(.subheadline)
-                    }
                 }
                 .confirmationDialog(
                     "Delete pairing file?",
@@ -607,122 +601,18 @@ struct PairingTab: View {
                     }
                 }
 
-                // iOS 26 Notice (On-Device pairing unavailable due to removed Developer Mode menu & blocked loopback)
-                if vm.isIOS26OrLower {
-                    Section {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack(spacing: 8) {
-                                Image(systemName: "exclamationmark.shield.fill")
-                                    .font(.title3)
-                                    .foregroundStyle(.orange)
-                                Text("iOS \(vm.systemMajorVersion) Pairing Notice")
-                                    .font(.subheadline.bold())
-                            }
-                            Text("On iOS 26, Apple removed Developer Mode pairing from Settings and blocked unauthenticated loopback lockdownd connections. On-device pairing is unavailable.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Text("Use an embedded pairing file injected into the IPA via AirCard Injector, or import your custom pairing file (.plist) from the Files app below.")
-                                .font(.caption.bold())
-                                .foregroundStyle(.primary)
-                        }
-                        .padding(.vertical, 4)
-                    }
-                }
-
-                // Embedded IPA Pairing File Detection (iOS 26 and iOS 27+)
-                if let embeddedName = vm.embeddedPairingFileName {
-                    Section("Embedded Pairing File (IPA Bundle)") {
-                        HStack(spacing: 10) {
-                            Image(systemName: "cube.box.fill")
-                                .font(.title3)
-                                .foregroundStyle(.indigo)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(embeddedName)
-                                    .font(.subheadline.bold())
-                                Text("Detected inside app bundle (injected into IPA)")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Button("Use Embedded") {
-                                vm.restoreEmbeddedPairingFile()
-                            }
-                            .font(.caption.bold())
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                        }
-                    }
-                }
-
-                // Pairing File Setup (Custom File from Files App)
-                Section(vm.isIOS27OrHigher ? "Import Pairing File (Alternative)" : "Import Custom Pairing File") {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Select a pairing record (.plist / .mobiledevicepairing) generated from idevice_pair or AirCard Injector:")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.vertical, 2)
-
+                // An injected record is copied to the app's canonical location automatically.
+                // Keep the replacement path compact; the active-file row is the only inventory needed.
+                Section(vm.hasPairingFile ? "Replace Pairing File" : "Add Pairing File") {
                     Button {
                         showFilePicker = true
                     } label: {
-                        Label("Choose Pairing File from Files…", systemImage: "folder.badge.plus")
+                        Label(vm.hasPairingFile ? "Choose Replacement from Files…" : "Choose Pairing File from Files…", systemImage: "folder.badge.plus")
                             .bold()
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                }
-
-                // Files found in Documents folder
-                if !vm.documentsPlistFiles.isEmpty {
-                    Section("Files in App Folder (On My iPhone › AirCard-iOS)") {
-                        ForEach(vm.documentsPlistFiles, id: \.self) { file in
-                            let isSelected = (file == vm.activeSourceFileName) || (vm.activeSourceFileName.isEmpty && file == vm.pairingFileName)
-                            let docURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent(file)
-                            let fileType = vm.inspectPairingFile(path: docURL.path)
-                            HStack {
-                                Image(systemName: isSelected ? "checkmark.circle.fill" : "doc.text")
-                                    .foregroundStyle(isSelected ? .green : .blue)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(file)
-                                        .font(.system(size: 13, design: .monospaced))
-                                    switch fileType {
-                                    case .lockdown:
-                                        Text("Lockdown Record (Requires LocalDevVPN)")
-                                            .font(.caption2)
-                                            .foregroundStyle(.green)
-                                    case .remotePairingComplete:
-                                        Text("RPPairing RSD (Paired)")
-                                            .font(.caption2)
-                                            .foregroundStyle(.blue)
-                                    case .remotePairingIncomplete:
-                                        Text("Incomplete RPPairing (Missing alt_irk)")
-                                            .font(.caption2)
-                                            .foregroundStyle(.orange)
-                                    case .unknown:
-                                        EmptyView()
-                                    }
-                                }
-                                Spacer()
-                                if !isSelected {
-                                    Button("Select") {
-                                        vm.selectPairingFile(filename: file)
-                                    }
-                                    .font(.caption.bold())
-                                    .buttonStyle(.bordered)
-                                    .controlSize(.small)
-                                }
-                                Button(role: .destructive) {
-                                    vm.deleteDocumentFile(filename: file)
-                                } label: {
-                                    Image(systemName: "trash")
-                                        .foregroundStyle(.red.opacity(0.7))
-                                }
-                                .buttonStyle(.borderless)
-                            }
-                        }
-                    }
+                    .controlSize(vm.hasPairingFile ? .regular : .large)
                 }
 
                 if !vm.log.isEmpty {
@@ -845,11 +735,12 @@ struct VPNStatusRow: View {
                     vm.refreshPairingFile()
                     vm.log.append("Network refreshed: VPN=\(vm.vpnUp ? "UP" : "DOWN"), WiFi=\(vm.wifiUp ? "UP" : "DOWN")")
                 } label: {
-                    Label("Refresh", systemImage: "arrow.clockwise")
+                    Image(systemName: "arrow.clockwise")
                         .font(.caption.bold())
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.mini)
+                .accessibilityLabel("Refresh network status")
             }
 
             if !vm.networkDetail.isEmpty {

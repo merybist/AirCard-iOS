@@ -16,6 +16,22 @@ struct CardItem: Identifiable, Equatable {
         customImage ?? (customImageData.flatMap { UIImage(data: $0) })
     }
 
+    /// Normalizes a card identifier pasted from a file name or scanner result.
+    static func cleanCardId(_ raw: String) -> String? {
+        var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        s = s.trimmingCharacters(in: CharacterSet(charactersIn: "'\",()<>;[]{}"))
+        if s.contains("/") {
+            s = (s as NSString).lastPathComponent
+        }
+        for ext in [".pkpass", ".cache", ".pkcache"] where s.hasSuffix(ext) {
+            s = String(s.dropLast(ext.count))
+        }
+        s = s.trimmingCharacters(in: CharacterSet(charactersIn: "'\",()<>;[]{}. "))
+        guard s.count >= 20, s.count <= 64, !s.contains("/") else { return nil }
+        guard !(s.count == 36 && s.filter({ $0 == "-" }).count == 4) else { return nil }
+        return s
+    }
+
     static func == (lhs: CardItem, rhs: CardItem) -> Bool {
         lhs.id == rhs.id &&
         lhs.isSelected == rhs.isSelected &&
