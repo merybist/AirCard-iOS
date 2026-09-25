@@ -8,6 +8,7 @@ import UniformTypeIdentifiers
 /// Wallet tab is replaced by a backup-aware implementation.
 struct AirCardFeatureRootView: View {
     @EnvironmentObject var vm: AppViewModel
+    static let enabledTabs: Set<AppTab> = [.pairing, .walletCards, .passcodeThemes, .wallpapers]
 
     var body: some View {
         TabView(selection: $vm.selectedTab) {
@@ -22,6 +23,12 @@ struct AirCardFeatureRootView: View {
             PasscodeThemeTab()
                 .tabItem { Label("Passcode", systemImage: "lock.circle.fill") }
                 .tag(AppTab.passcodeThemes)
+
+            if Self.enabledTabs.contains(.wallpapers) {
+                TendiesView()
+                    .tabItem { Label("Wallpapers", systemImage: "photo.stack.fill") }
+                    .tag(AppTab.wallpapers)
+            }
         }
         .alert("Notice", isPresented: Binding(
             get: { vm.errorMessage != nil },

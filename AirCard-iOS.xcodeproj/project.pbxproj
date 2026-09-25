@@ -11,6 +11,7 @@
 		020B872AD88B37539AE14A31 /* WalletFlashIntegration.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC8BC0067EE7FA61CFACF2AD /* WalletFlashIntegration.swift */; };
 		10C7FE930176492218178056 /* WalletCardIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3231D996B65477197871E356 /* WalletCardIdentity.swift */; };
 		1AEC22E7CA98113906CAB5D3 /* WalletRenderedReferenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8210AE14AA63BFD382E9CC3D /* WalletRenderedReferenceTests.swift */; };
+		1CBB456B9F2519162F90EBD5 /* AirCardFeatureRootViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9E015769795BAFD87B1F6D3 /* AirCardFeatureRootViewTests.swift */; };
 		2298380CF8CA245F06A363A1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D0F9F55D9C9EC2D4AE16F004 /* Assets.xcassets */; };
 		49063A6C03B1966F92F0915B /* AppViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DCB2FCB8D4F45B9474A81BC /* AppViewModel.swift */; };
 		5B5E77FD33002928D5636944 /* WalletCardPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F84AECE9F2C4EA1B35449760 /* WalletCardPreviewView.swift */; };
@@ -69,6 +70,7 @@
 		BC8BC0067EE7FA61CFACF2AD /* WalletFlashIntegration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletFlashIntegration.swift; sourceTree = "<group>"; };
 		CCEE0E39AF8DEAE3E55A456C /* GrappaHelper.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = GrappaHelper.m; sourceTree = "<group>"; };
 		D0F9F55D9C9EC2D4AE16F004 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		D9E015769795BAFD87B1F6D3 /* AirCardFeatureRootViewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AirCardFeatureRootViewTests.swift; sourceTree = "<group>"; };
 		E001E5A3AA0793BBC1F623A7 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		E926F2F6009F046A2F7C3549 /* AirCardFeatureRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AirCardFeatureRootView.swift; sourceTree = "<group>"; };
 		F1787F9DD9A92A8E84A56E8C /* WalletRenderedReference.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletRenderedReference.swift; sourceTree = "<group>"; };
@@ -91,6 +93,7 @@
 		5E8514F8CBCCA6F15C78A827 /* ios-tests */ = {
 			isa = PBXGroup;
 			children = (
+				D9E015769795BAFD87B1F6D3 /* AirCardFeatureRootViewTests.swift */,
 				8210AE14AA63BFD382E9CC3D /* WalletRenderedReferenceTests.swift */,
 				6FBBA0E29B927700DDA0D4DA /* WalletSafetyTests.swift */,
 			);
@@ -250,6 +253,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1CBB456B9F2519162F90EBD5 /* AirCardFeatureRootViewTests.swift in Sources */,
 				1AEC22E7CA98113906CAB5D3 /* WalletRenderedReferenceTests.swift in Sources */,
 				7670320D1DDD70D9B84B0B27 /* WalletSafetyTests.swift in Sources */,
 			);

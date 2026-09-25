@@ -2,7 +2,7 @@ import XCTest
 import UIKit
 @testable import AirCard_iOS
 
-private final class FixturePKImage: NSObject, NSCoding {
+final class FixturePKImage: NSObject, NSCoding {
     let imageData: Data
 
     init(imageData: Data) {
@@ -21,7 +21,7 @@ private final class FixturePKImage: NSObject, NSCoding {
     }
 }
 
-private final class FixtureFrontFaceImageSet: NSObject, NSCoding {
+final class FixtureFrontFaceImageSet: NSObject, NSCoding {
     let faceImage: FixturePKImage
 
     init(faceImage: FixturePKImage) {
